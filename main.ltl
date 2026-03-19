@@ -1,0 +1,15 @@
+$red = #FF0000
+$white = #FFFFFF
+
+style debug:
+	border-color = $red
+	border-weight = 1
+	
+root:
+	direction = row
+	node "test":
+		apply debug
+		share = 3
+	node:
+		apply debug
+		share = 7

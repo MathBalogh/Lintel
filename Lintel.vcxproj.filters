@@ -1,0 +1,92 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="lib">
+      <UniqueIdentifier>{4e8b4e30-9cf9-42a4-a82f-34005fe7b29b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src">
+      <UniqueIdentifier>{c830aa5f-c4cc-4ad6-b7f3-34fa96747149}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lib\core">
+      <UniqueIdentifier>{e4e43b06-b9f2-424a-b444-aa4c4d55c3ff}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lib\internal">
+      <UniqueIdentifier>{c9bca3fb-f7da-4582-b031-34e9d2fc98eb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lib\api">
+      <UniqueIdentifier>{9a76d90c-c5d7-4900-8224-adf682be1717}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lib\core\gpu">
+      <UniqueIdentifier>{b1ba17ee-f9da-400b-bc07-7cf23fbb52b4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lib\internal\window">
+      <UniqueIdentifier>{ba48dd07-da70-4fce-83f4-299fd1a6cc62}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lib\internal\node">
+      <UniqueIdentifier>{b97e22e1-ebf0-438a-9052-cc0caf47a2a8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lib\parser">
+      <UniqueIdentifier>{c5ad18c5-e0f1-4f60-9311-096c32174048}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lib\internal\text node">
+      <UniqueIdentifier>{042f426d-8751-4da4-9b8e-1911dd0bfd18}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="core.cpp">
+      <Filter>lib\core</Filter>
+    </ClCompile>
+    <ClCompile Include="gpu.cpp">
+      <Filter>lib\core\gpu</Filter>
+    </ClCompile>
+    <ClCompile Include="lintel.cpp">
+      <Filter>lib\api</Filter>
+    </ClCompile>
+    <ClCompile Include="iwindow.cpp">
+      <Filter>lib\internal\window</Filter>
+    </ClCompile>
+    <ClCompile Include="inode.cpp">
+      <Filter>lib\internal\node</Filter>
+    </ClCompile>
+    <ClCompile Include="parser.cpp">
+      <Filter>lib\parser</Filter>
+    </ClCompile>
+    <ClCompile Include="itextnode.cpp">
+      <Filter>lib\internal\text node</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="core.h">
+      <Filter>lib\core</Filter>
+    </ClInclude>
+    <ClInclude Include="lintel.h">
+      <Filter>lib\api</Filter>
+    </ClInclude>
+    <ClInclude Include="handle.h">
+      <Filter>lib\api</Filter>
+    </ClInclude>
+    <ClInclude Include="gpu.h">
+      <Filter>lib\core\gpu</Filter>
+    </ClInclude>
+    <ClInclude Include="iwindow.h">
+      <Filter>lib\internal\window</Filter>
+    </ClInclude>
+    <ClInclude Include="inode.h">
+      <Filter>lib\internal\node</Filter>
+    </ClInclude>
+    <ClInclude Include="itextnode.h">
+      <Filter>lib\internal\text node</Filter>
+    </ClInclude>
+    <ClInclude Include="lexer.h">
+      <Filter>lib\parser</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="main.ltl">
+      <Filter>src</Filter>
+    </None>
+  </ItemGroup>
+</Project>

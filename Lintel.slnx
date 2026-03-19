@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="Lintel.vcxproj" Id="7617775b-b08e-4d35-af4b-134723ff8e4e" />
+</Solution>

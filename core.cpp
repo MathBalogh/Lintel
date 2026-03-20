@@ -47,7 +47,6 @@ Core::~Core() {
         worker_.join();
     }
 }
-
 Core& Core::get() {
     static Core instance;
     return instance;
@@ -64,7 +63,6 @@ bool Core::try_pop(WindowMessage& out) {
     queue_.pop();
     return true;
 }
-
 void Core::push(WindowMessage m) {
     std::lock_guard lock(mut_);
     // Soft cap - prevents unbounded growth when the worker falls behind.
@@ -209,9 +207,9 @@ void Core::process_message(UINT msg, WPARAM wp, LPARAM lp) {
                 root_impl->update_hover(WeakNode(root), -1.f, -1.f);
             break;
 
-            // -----------------------------------------------------------------------
-            // Button down — press, optional focus transfer
-            // -----------------------------------------------------------------------
+        // -----------------------------------------------------------------------
+        // Button down — press, optional focus transfer
+        // -----------------------------------------------------------------------
 
         case WM_LBUTTONDOWN:
         case WM_RBUTTONDOWN:

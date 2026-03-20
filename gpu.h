@@ -5,12 +5,14 @@
 #include <dwrite.h>
 #include <d2d1_1.h>
 #include <wrl/client.h>
+#include <wincodec.h>
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "d3dcompiler.lib")
 #pragma comment(lib, "dwrite.lib")
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "dxgi.lib")
+#pragma comment(lib, "windowscodecs.lib")
 
 using Microsoft::WRL::ComPtr;
 
@@ -28,6 +30,7 @@ struct GpuContext {
     ComPtr<ID2D1Device>         d2d_device;
     ComPtr<ID2D1DeviceContext>  d2d_context;
     ComPtr<IDWriteFactory>      dwrite_factory;
+    ComPtr<IWICImagingFactory>  wic_factory;
 
     // Returns false if any device object failed to initialise.
     bool initialize();

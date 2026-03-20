@@ -20,7 +20,7 @@ namespace lintel {
  * factory methods (ensure_format / make_layout) so the same abstraction is
  * used throughout, even in the non-draw paths (measure, hit testing).
  *
- * ── Input wiring (registered in wire_events(), called from constructors) ──
+ * -- Input wiring (registered in wire_events(), called from constructors) --
  *
  *   Event::Focus     – sets has_focus, resets caret blink timer.
  *   Event::Blur      – clears has_focus, caret, and selection.
@@ -47,7 +47,7 @@ namespace lintel {
  */
 class ITextNode : public INode {
 public:
-    /* ── resolved appearance (kept in sync with attr map) ────────────────── */
+    /* -- resolved appearance (kept in sync with attr map) ------------------ */
     std::wstring font_family = L"Segoe UI";
     float        font_size = 14.f;
     Color        text_color = Color(1.f, 1.f, 1.f, 1.f);
@@ -57,14 +57,14 @@ public:
     bool         wrap = true;
     bool         editable = false;
 
-    /* ── content & editing state ──────────────────────────────────────────── */
+    /* -- content & editing state -------------------------------------------- */
     std::wstring content;               // UTF-16 text displayed by this node.
     size_t       caret_pos = 0; // Active end of the selection (0 … size).
     size_t       selection_anchor = 0; // Fixed end of the selection.
     bool         has_focus = false;
     bool         lmb_selecting = false; // True while LMB is held for drag-select.
 
-    /* ── selection helpers ───────────────────────────────────────────────── */
+    /* -- selection helpers ------------------------------------------------- */
 
     bool   has_selection() const { return selection_anchor != caret_pos; }
     size_t sel_start()     const { return std::min(selection_anchor, caret_pos); }
@@ -84,7 +84,7 @@ public:
      */
     void delete_selection();
 
-    /* ── DirectWrite helpers ──────────────────────────────────────────────── */
+    /* -- DirectWrite helpers ------------------------------------------------ */
 
     // IDWriteTextFormat is built lazily via CORE.canvas.make_text_format()
     // and cached here between frames.  It is invalidated whenever a
@@ -106,14 +106,14 @@ public:
      */
     void sync_style();
 
-    /* ── layout ───────────────────────────────────────────────────────────── */
+    /* -- layout ------------------------------------------------------------- */
     void measure(float avail_w, float avail_h) override;
     void arrange(float slot_x, float slot_y)   override;
 
-    /* ── rendering ────────────────────────────────────────────────────────── */
+    /* -- rendering ---------------------------------------------------------- */
     void draw(Node& handle, Canvas& canvas) override;
 
-    /* ── event wiring ─────────────────────────────────────────────────────── */
+    /* -- event wiring ------------------------------------------------------- */
 
     /**
      * @brief Register all input handlers on @p handle.
@@ -122,7 +122,7 @@ public:
      */
     void wire_events(Node& handle);
 
-    /* ── clipboard ────────────────────────────────────────────────────────── */
+    /* -- clipboard ---------------------------------------------------------- */
 
     /**
      * @brief Copy the current selection to the system clipboard (CF_UNICODETEXT).
@@ -139,7 +139,7 @@ public:
      */
     void paste_from_clipboard();
 
-    /* ── editing callbacks (called from the wired handlers) ──────────────── */
+    /* -- editing callbacks (called from the wired handlers) ---------------- */
 
     /** Insert @p ch at the caret, replacing any selection. */
     void on_input(wchar_t ch);
@@ -191,7 +191,7 @@ public:
     void on_click_position(float lx, float ly, bool extend);
 
 private:
-    /* ── word-boundary helpers ────────────────────────────────────────────── */
+    /* -- word-boundary helpers ---------------------------------------------- */
 
     size_t word_start(size_t pos) const;
     size_t word_end(size_t pos) const;

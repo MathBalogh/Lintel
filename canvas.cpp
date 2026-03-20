@@ -77,6 +77,44 @@ void Canvas::draw_text(std::wstring_view text, IDWriteTextFormat* fmt,
 }
 
 // ---------------------------------------------------------------------------
+// WIC
+// ---------------------------------------------------------------------------
+
+ComPtr<ID2D1Bitmap> Canvas::load_bitmap(std::string_view path) const {
+    if (path.empty()) return {};
+
+    std::wstring wpath(path.begin(), path.end());
+
+    ComPtr<IWICBitmapDecoder> decoder;
+    if (FAILED(gpu_.wic_factory->CreateDecoderFromFilename(
+        wpath.c_str(), nullptr, GENERIC_READ,
+        WICDecodeMetadataCacheOnLoad, &decoder)))
+        return {};
+
+    ComPtr<IWICBitmapFrameDecode> frame;
+    if (FAILED(decoder->GetFrame(0, &frame))) return {};
+
+    ComPtr<IWICFormatConverter> converter;
+    if (FAILED(gpu_.wic_factory->CreateFormatConverter(&converter))) return {};
+
+    if (FAILED(converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppPBGRA,
+        WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeMedianCut)))
+        return {};
+
+    ComPtr<ID2D1Bitmap> bmp;
+    if (FAILED(dc()->CreateBitmapFromWicBitmap(converter.Get(), nullptr, &bmp)))
+        return {};
+
+    return bmp;
+}
+
+void Canvas::draw_image(ID2D1Bitmap* bmp, const Rect& dest_rect) {
+    if (!bmp) return;
+    dc()->DrawBitmap(bmp, to_d2df(dest_rect), 1.0f, D2D1_INTERPOLATION_MODE_LINEAR);
+}
+
+
+// ---------------------------------------------------------------------------
 // Clipping
 // ---------------------------------------------------------------------------
 

@@ -34,7 +34,7 @@ class Canvas {
 public:
     explicit Canvas(GpuContext& gpu) noexcept;
 
-    // ── Filled shapes ───────────────────────────────────────────────────────
+    // -- Filled shapes -------------------------------------------------------
 
     // Fill a rectangle with an optional uniform corner radius.
     void fill_rect(const Rect& r, Color c, float corner_radius = 0.f);
@@ -42,7 +42,7 @@ public:
     // Fill an axis-aligned ellipse whose centre is (cx, cy).
     void fill_ellipse(float cx, float cy, float rx, float ry, Color c);
 
-    // ── Stroked shapes ──────────────────────────────────────────────────────
+    // -- Stroked shapes ------------------------------------------------------
 
     // Draw a rectangle outline.  stroke_width > 0 required.
     void stroke_rect(const Rect& r, Color c, float stroke_width,
@@ -54,7 +54,7 @@ public:
                    Color c, float width,
                    ID2D1StrokeStyle* style = nullptr);
 
-    // ── Text ────────────────────────────────────────────────────────────────
+    // -- Text ----------------------------------------------------------------
 
     // Render a string using an existing DWrite format into layout_box.
     // layout_box uses absolute screen-pixel coordinates (x, y, w, h).
@@ -63,14 +63,27 @@ public:
                    const Rect& layout_box,
                    Color                c);
 
-    // ── Clipping ────────────────────────────────────────────────────────────
+    // -- Images ----------------------------------------------------------
+    /**
+     * Load a bitmap from disk (PNG, JPG, BMP, … — any WIC-supported format).
+     * Returns empty ComPtr on any failure.  The bitmap is created on the
+     * D2D device and can be cached safely on the node.
+     */
+    ComPtr<ID2D1Bitmap> load_bitmap(std::string_view path) const;
+
+    /**
+     * Draw bitmap stretched to fill dest_rect (source = full bitmap).
+     */
+    void draw_image(ID2D1Bitmap* bmp, const Rect& dest_rect);
+
+    // -- Clipping ------------------------------------------------------------
 
     // Push an axis-aligned clip rect (ALIASED, i.e. pixel-snapped edges).
     // Every push_clip must be paired with a pop_clip.
     void push_clip(const Rect& r);
     void pop_clip();
 
-    // ── COM-object factories ─────────────────────────────────────────────────
+    // -- COM-object factories -------------------------------------------------
     //
     // All returned objects are owned by the caller.  These are provided so
     // that nodes which need to cache a COM object across frames (e.g.

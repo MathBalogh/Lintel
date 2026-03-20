@@ -182,7 +182,7 @@ void INode::focus_next(Node& tree_root) {
 // ===========================================================================
 
 void INode::measure(float avail_w, float avail_h) {
-    // ── Early exit: nothing changed since the last layout pass ────────────
+    // -- Early exit: nothing changed since the last layout pass ------------
     //
     // attr.layout_dirty is set whenever a box-model or layout-behavior prop
     // is written through attr.set().  If it is clear and the parent is

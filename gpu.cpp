@@ -72,5 +72,14 @@ bool GpuContext::initialize() {
         &dwrite_factory
     ));
 
+    // -----------------------------------------------------------------------
+    // WIC factory
+    // -----------------------------------------------------------------------
+
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    HR_RET_F(CoCreateInstance(CLSID_WICImagingFactory, nullptr,
+             CLSCTX_INPROC_SERVER,
+             IID_PPV_ARGS(&wic_factory)));
+
     return true;
 }

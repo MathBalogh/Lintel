@@ -17,22 +17,7 @@ namespace lintel {
 // ---------------------------------------------------------------------------
 // Prop — unified property key enum
 // ---------------------------------------------------------------------------
-//
-// Every addressable property on a node has a single Prop enumerator.  Values
-// in [0, k_hot_count) are "hot": stored in a flat std::array for O(1)
-// indexed access with no hashing.  Values >= k_hot_count are "cold": stored
-// in an overflow unordered_map and used only for node-specific or rarely-read
-// properties.
-//
-// Three categories of hot properties (layout-affecting ones marked with ★):
-//
-//   Visual       BackgroundColor … FontFamily        indices  0–6
-//   Box model ★  Width … Share                       indices  7–18
-//   Layout beh ★ Direction … JustifyItems            indices 19–21
-//
-// Cold properties cover text formatting and graph-specific styling that do
-// not affect the base layout pipeline.
-//
+
 enum class Prop : uint32_t {
     // ── Visual (hot) ──────────────────────────────────────────────────────
     BackgroundColor = 0,
@@ -428,6 +413,17 @@ public:
     GraphNode& clear_series();
     GraphNode& x_range(float lo, float hi);
     GraphNode& y_range(float lo, float hi);
+};
+
+// ---------------------------------------------------------------------------
+// ImageNode
+// ---------------------------------------------------------------------------
+
+class ImageNode : public Node {
+public:
+    ImageNode();
+    explicit ImageNode(std::string_view path);
+    ImageNode& source(std::string_view path);   // change image at runtime
 };
 
 // ---------------------------------------------------------------------------

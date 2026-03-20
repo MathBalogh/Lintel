@@ -131,6 +131,7 @@
     <ClCompile Include="core.cpp" />
     <ClCompile Include="gpu.cpp" />
     <ClCompile Include="igraphnode.cpp" />
+    <ClCompile Include="iimagenode.cpp" />
     <ClCompile Include="inode.cpp" />
     <ClCompile Include="itextnode.cpp" />
     <ClCompile Include="iwindow.cpp" />
@@ -144,6 +145,7 @@
     <ClInclude Include="gpu.h" />
     <ClInclude Include="handle.h" />
     <ClInclude Include="igraphnode.h" />
+    <ClInclude Include="iimagenode.h" />
     <ClInclude Include="inode.h" />
     <ClInclude Include="itextnode.h" />
     <ClInclude Include="iwindow.h" />
@@ -152,6 +154,9 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="main.ltl" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="image.jpg" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

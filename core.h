@@ -14,8 +14,7 @@
 #include <thread>
 
 #include "gpu.h"
-#include "canvas.h"   // ← Canvas abstraction; included here so every node TU
-//   that includes core.h automatically sees the type.
+#include "canvas.h"
 
 // Shortcuts to the singleton and its GPU / Canvas contexts.
 #define CORE Core::get()

@@ -2,48 +2,15 @@
 //
 // Implementation of the cpage document language parser.
 //
-// Design goals
-// ------------
-//  • deterministic parsing (no exceptions during normal value parsing)
-//  • minimal string copying
-//  • explicit invariants for indentation-based structure
-//  • extensible node and property registries
-//
-// Parsing pipeline
-// ----------------
-//  1. Read file
-//  2. Extract variable declarations  ($name = value)
-//  3. Substitute variables
-//  4. Lex meaningful lines           (indent + trimmed content)
-//  5. Build AST with recursive descent
-//     - top-level  style <name>:  blocks are collected into a StyleTable
-//     - node blocks may contain  apply <name>  and  on <event>:  lines
-//  6. Convert AST -> runtime node tree
-//     - apply inlines template properties (local props override)
-//     - on <event>  wires a lambda via node.on(Event::type, ...)
-//
-// Extended grammar
-// ----------------
-//  document      := (style_block | root_block)*
-//
-//  style_block   := 'style' IDENT ':' NEWLINE
-//                   (INDENT property | INDENT on_block)*
-//
-//  root_block    := 'root' ':' NEWLINE
-//                   (INDENT node_body)*
-//
-//  node_block    := TYPE ['"' NAME '"'] ':' NEWLINE
-//                   (INDENT node_body)*
-//
-//  node_body     := property
-//                 | 'apply' IDENT
-//                 | on_block
-//                 | node_block
-//
-//  on_block      := 'on' IDENT ':' NEWLINE
-//                   (INDENT property)*
-//
-//  property      := IDENT '=' value
+// Property pipeline change
+// ------------------------
+// String tokens are now mapped to Prop enum values once during apply_props
+// rather than being compared at draw / layout time.  The k_prop_map table
+// covers every directly assignable property; shorthand properties (padding,
+// margin) and keyword-valued enum properties (direction, align, justify,
+// text-align) are handled by named special-case blocks immediately before
+// the generic lookup, exactly as they were with the old dispatch tables —
+// just with Prop::xxx keys instead of Node fluent setter lambdas.
 //
 
 #include "lexer.h"
@@ -64,7 +31,7 @@ std::unordered_map<std::string, ValueFuncParser> s_value_func_registry;
 } // namespace detail
 
 // ----------------------------------------------------------------
-// Registries
+// Node factory registry
 // ----------------------------------------------------------------
 using NodeFactory = std::function<Node(Node&, const ASTNode&)>;
 static std::unordered_map<std::string, NodeFactory> s_node_registry;
@@ -84,7 +51,6 @@ static bool s_registered = ([] {
     register_node("text", [] (Node&, const ASTNode&) { return TextNode();  });
     register_node("graph", [] (Node&, const ASTNode&) { return GraphNode(); });
 
-    // Extensible colour function; users can register "hsl", "rgba", etc. the same way.
     register_value_function("rgb", [] (std::string_view args) -> AttribValue {
         std::vector<float> vals;
         size_t pos = 0;
@@ -113,16 +79,16 @@ static bool s_registered = ([] {
 })();
 
 // ----------------------------------------------------------------
-// Style table  (name -> props + per-event deltas)
+// Style table
 // ----------------------------------------------------------------
 struct StyleEntry {
-    std::vector<Property>                            props;
-    std::unordered_map<std::string, StyleDelta>      event_styles;
+    std::vector<Property>                       props;
+    std::unordered_map<std::string, StyleDelta> event_styles;
 };
 using StyleTable = std::unordered_map<std::string, StyleEntry>;
 
 // ----------------------------------------------------------------
-// Recursive-descent parser
+// Recursive-descent parser  (unchanged from original)
 // ----------------------------------------------------------------
 namespace {
 
@@ -130,25 +96,19 @@ struct RDParser {
     const std::vector<Line>& lines;
     size_t                   pos = 0;
 
-    bool        done()  const { return pos >= lines.size(); }
-    const Line& cur()   const { return lines[pos]; }
+    bool        done() const { return pos >= lines.size(); }
+    const Line& cur()  const { return lines[pos]; }
 
-    // ---- helpers ------------------------------------------------
-
-    // Returns true if `content` looks like "on <word>:" or "on <word>"
     static bool is_on_block(std::string_view content) {
         return content.starts_with("on ") &&
             (content.back() == ':' ||
              content.find(' ', 3) == std::string_view::npos);
     }
 
-    // Returns true if `content` looks like "apply <word>"
     static bool is_apply(std::string_view content) {
         return content.starts_with("apply ");
     }
 
-    // Returns true if the line is a property assignment (key = value)
-    // and the '=' comes before any ':' (to avoid matching node declarations).
     static bool is_property(std::string_view content) {
         auto eq = content.find('=');
         auto col = content.find(':');
@@ -156,16 +116,12 @@ struct RDParser {
             (col == std::string_view::npos || eq < col);
     }
 
-    // Extract the event name from "on <name>[:]"
     static std::string event_name(std::string_view content) {
-        // strip leading "on "
         auto rest = detail::trim(content.substr(3));
-        if (!rest.empty() && rest.back() == ':')
-            rest.remove_suffix(1);
+        if (!rest.empty() && rest.back() == ':') rest.remove_suffix(1);
         return std::string(detail::trim(rest));
     }
 
-    // Parse one property line; pos must already point at it.
     Property parse_property_line() {
         const std::string& text = cur().content;
         auto eq_pos = text.find('=');
@@ -175,18 +131,11 @@ struct RDParser {
         return { std::string(key), detail::parse_value(val) };
     }
 
-    // ---- on-block -----------------------------------------------
-    // Parse "on <event>:" and its indented property children.
-    // Returns {event_name, delta_props}.
-    //
-    // child_indent is derived from the "on" line itself, not from any
-    // parent context — this is what was causing the off-by-one indentation
-    // error when on-blocks appeared inside already-indented nodes.
     std::pair<std::string, StyleDelta> parse_on_block() {
         std::string name = event_name(cur().content);
-        int         on_indent = cur().indent;       // e.g. 2 inside a node at level 1
-        int         child_indent = on_indent + 1;   // properties must be one level deeper
-        ++pos; // consume the "on ..." line
+        int         on_indent = cur().indent;
+        int         child_indent = on_indent + 1;
+        ++pos;
 
         StyleDelta delta;
         while (!done() && cur().indent == child_indent) {
@@ -199,7 +148,6 @@ struct RDParser {
         return { name, std::move(delta) };
     }
 
-    // ---- node-block ---------------------------------------------
     ASTNode parse_node() {
         ASTNode node;
         int base = cur().indent;
@@ -208,7 +156,6 @@ struct RDParser {
         std::string decl = cur().content;
         if (decl.back() == ':') decl.pop_back();
 
-        // Extract optional "name" from the declaration  (text "title":)
         auto q1 = decl.find('"');
         if (q1 != std::string::npos) {
             auto q2 = decl.find('"', q1 + 1);
@@ -218,7 +165,7 @@ struct RDParser {
             }
         }
         node.type = std::string(detail::trim(decl));
-        ++pos; // consume node declaration line
+        ++pos;
 
         while (!done()) {
             if (cur().indent < child) break;
@@ -228,9 +175,7 @@ struct RDParser {
             std::string_view content = cur().content;
 
             if (is_apply(content)) {
-                // "apply <style-name>"
-                node.applies.push_back(
-                    std::string(detail::trim(content.substr(6))));
+                node.applies.push_back(std::string(detail::trim(content.substr(6))));
                 ++pos;
             }
             else if (is_on_block(content)) {
@@ -241,27 +186,19 @@ struct RDParser {
                 node.props.push_back(parse_property_line());
             }
             else {
-                // Must be a child node block
                 node.children.push_back(parse_node());
             }
         }
         return node;
     }
 
-    // ---- style-block --------------------------------------------
-    // style <name>:
-    //     prop = value
-    //     on <event>:
-    //         prop = value
     std::pair<std::string, StyleEntry> parse_style_block() {
-        int base = cur().indent; // should be 0
+        int base = cur().indent;
         int child = base + 1;
 
-        // Extract style name from "style <name>:"
         std::string decl = cur().content;
         if (decl.back() == ':') decl.pop_back();
-        std::string name(detail::trim(
-            std::string_view(decl).substr(5))); // skip "style"
+        std::string name(detail::trim(std::string_view(decl).substr(5)));
         ++pos;
 
         StyleEntry entry;
@@ -287,8 +224,6 @@ struct RDParser {
         return { name, std::move(entry) };
     }
 
-    // ---- document -----------------------------------------------
-    // Collects style blocks into `styles`, then returns the root node.
     ASTNode parse_document(StyleTable& styles) {
         while (!done()) {
             std::string_view content = cur().content;
@@ -300,7 +235,7 @@ struct RDParser {
                 return parse_node();
             }
             else {
-                ++pos; // skip unrecognised top-level lines
+                ++pos;
             }
         }
         throw std::runtime_error("no root node found");
@@ -314,128 +249,171 @@ struct RDParser {
 // ----------------------------------------------------------------
 static void build_children(Node&, const std::vector<ASTNode>&, const StyleTable&);
 
-// ---- Event name -> Event enum dispatch table ----------------------------
-//
-// Covers every Event enumerator from lintel.h.  Unknown names are logged
-// and skipped; no if-chain needed at call sites.
-//
+// ---- Event name dispatch table ------------------------------------------
 static const std::unordered_map<std::string, Event> k_event_names = {
-    { "mouse-enter",   Event::MouseEnter   },
-    { "mouse-leave",   Event::MouseLeave   },
-    { "mouse-move",    Event::MouseMove    },
-    { "mouse-down",    Event::MouseDown    },
-    { "mouse-up",      Event::MouseUp      },
-    { "click",         Event::Click        },
-    { "double-click",  Event::DoubleClick  },
-    { "right-click",   Event::RightClick   },
-    { "scroll",        Event::Scroll       },
-    { "focus",         Event::Focus        },
-    { "blur",          Event::Blur         },
-    { "key-down",      Event::KeyDown      },
-    { "key-up",        Event::KeyUp        },
-    { "char",          Event::Char         },
-    { "drag-start",    Event::DragStart    },
-    { "drag",          Event::Drag         },
-    { "drag-end",      Event::DragEnd      },
-    { "any",           Event::Any          },
+    { "mouse-enter",  Event::MouseEnter  }, { "mouse-leave",  Event::MouseLeave  },
+    { "mouse-move",   Event::MouseMove   }, { "mouse-down",   Event::MouseDown   },
+    { "mouse-up",     Event::MouseUp     }, { "click",        Event::Click       },
+    { "double-click", Event::DoubleClick }, { "right-click",  Event::RightClick  },
+    { "scroll",       Event::Scroll      }, { "focus",        Event::Focus       },
+    { "blur",         Event::Blur        }, { "key-down",     Event::KeyDown     },
+    { "key-up",       Event::KeyUp       }, { "char",         Event::Char        },
+    { "drag-start",   Event::DragStart   }, { "drag",         Event::Drag        },
+    { "drag-end",     Event::DragEnd     }, { "any",          Event::Any         },
 };
 
 static std::optional<Event> lookup_event(const std::string& name) {
     auto it = k_event_names.find(name);
-    if (it == k_event_names.end()) return std::nullopt;
-    return it->second;
+    return (it == k_event_names.end()) ? std::nullopt : std::optional(it->second);
 }
 
-// ---- Float property dispatch table -------------------------------------
+// ---- Prop lookup table --------------------------------------------------
 //
-// Each entry maps a property key to a setter on Node.
-// Using std::function avoids repeated key comparisons inside apply_props.
+// Every property that maps directly from a string key to a Prop enum value
+// lives here.  Shorthand properties (padding, margin) and keyword-valued
+// enum properties (direction, align, justify, text-align) are handled by
+// named special-case blocks in apply_props before this table is consulted.
 //
-using FloatSetter = std::function<void(Node&, float)>;
-static const std::unordered_map<std::string, FloatSetter> k_float_props = {
-    { "width",   [] (Node& n, float v) { n.width(v);          } },
-    { "height",  [] (Node& n, float v) { n.height(v);         } },
-    { "share",   [] (Node& n, float v) { n.share(v);          } },
-    { "gap",     [] (Node& n, float v) { n.gap(v);            } },
-    { "padding", [] (Node& n, float v) { n.padding(Edges(v)); } },
-    { "margin",  [] (Node& n, float v) { n.margin(Edges(v));  } },
+static const std::unordered_map<std::string, Prop> k_prop_map = {
+    // Visual
+    { "background-color", Prop::BackgroundColor },
+    { "border-color",     Prop::BorderColor     },
+    { "border-weight",    Prop::BorderWeight     },
+    { "corner-radius",    Prop::CornerRadius     },
+    { "text-color",       Prop::TextColor        },
+    { "font-size",        Prop::FontSize         },
+    { "font-family",      Prop::FontFamily       },
+    // Box model — individual sides
+    { "width",            Prop::Width            },
+    { "height",           Prop::Height           },
+    { "padding-top",      Prop::PaddingTop       },
+    { "padding-right",    Prop::PaddingRight     },
+    { "padding-bottom",   Prop::PaddingBottom    },
+    { "padding-left",     Prop::PaddingLeft      },
+    { "margin-top",       Prop::MarginTop        },
+    { "margin-right",     Prop::MarginRight      },
+    { "margin-bottom",    Prop::MarginBottom     },
+    { "margin-left",      Prop::MarginLeft       },
+    { "gap",              Prop::Gap              },
+    { "share",            Prop::Share            },
+    // Text
+    { "bold",             Prop::Bold             },
+    { "italic",           Prop::Italic           },
+    { "wrap",             Prop::Wrap             },
+    { "editable",         Prop::Editable         },
+    // Graph / chart
+    { "grid-color",       Prop::GridColor        },
+    { "grid-weight",      Prop::GridWeight       },
+    { "label-color",      Prop::LabelColor       },
+    { "label-font-size",  Prop::LabelFontSize    },
+    // Misc
+    { "opacity",          Prop::Opacity          },
 };
 
-// ---- Bool property dispatch table --------------------------------------
-using BoolSetter = std::function<void(Node&, bool)>;
-static const std::unordered_map<std::string, BoolSetter> k_bool_props = {
-    { "focusable", [] (Node& n, bool v) { n.focusable(v); } },
-    { "draggable", [] (Node& n, bool v) { n.draggable(v); } },
-    // { "editable",  [] (Node& n, bool v) { n.editable(v);  } },
-};
-
-// ---- Keyword (wstring) property dispatch tables ------------------------
+// ---- apply_props --------------------------------------------------------
 //
-// Each keyword property has its own value -> action map so that adding a new
-// keyword variant is a one-line table entry.
+// Converts each parsed Property (string key + AttribValue) into a typed
+// attr.set(Prop, ...) call.  The string-to-Prop conversion happens here,
+// once at tree-build time; no string lookup occurs during layout or draw.
 //
-static const std::unordered_map<std::wstring, std::function<void(Node&)>> k_direction_vals = {
-    { L"row",    [] (Node& n) { n.row();    } },
-    { L"column", [] (Node& n) { n.column(); } },
-};
-static const std::unordered_map<std::wstring, std::function<void(Node&)>> k_align_vals = {
-    { L"start",   [] (Node& n) { n.align(Align::Start);   } },
-    { L"center",  [] (Node& n) { n.align(Align::Center);  } },
-    { L"end",     [] (Node& n) { n.align(Align::End);     } },
-    { L"stretch", [] (Node& n) { n.align(Align::Stretch); } },
-};
-static const std::unordered_map<std::wstring, std::function<void(Node&)>> k_justify_vals = {
-    { L"start",         [] (Node& n) { n.justify(Justify::Start);        } },
-    { L"center",        [] (Node& n) { n.justify(Justify::Center);       } },
-    { L"end",           [] (Node& n) { n.justify(Justify::End);          } },
-    { L"space-between", [] (Node& n) { n.justify(Justify::SpaceBetween); } },
-    { L"space-around",  [] (Node& n) { n.justify(Justify::SpaceAround);  } },
-};
-
-// Keyword properties: key -> (value table, default action when key absent).
-// The default is invoked when the keyword is unrecognised.
-struct KeywordProp {
-    const std::unordered_map<std::wstring, std::function<void(Node&)>>* values;
-    std::function<void(Node&)> fallback; // called when value is not in the table
-};
-static const std::unordered_map<std::string, KeywordProp> k_keyword_props = {
-    { "direction", { &k_direction_vals, [] (Node& n) { n.row();                    } } },
-    { "align",     { &k_align_vals,     [] (Node& n) { n.align(Align::Stretch);    } } },
-    { "justify",   { &k_justify_vals,   [] (Node& n) { n.justify(Justify::Start);  } } },
-};
-
-// Apply a flat list of Property objects to a Node.
+// Ordering:
+//   1. Shorthand expansion (padding, margin) → calls Node fluent setters.
+//   2. Keyword/enum coercions (direction, align, justify, text-align).
+//   3. Behaviour flags (focusable, draggable) → direct INode flag writes.
+//   4. Generic k_prop_map lookup → attr.set(Prop, value).
+//
 static void apply_props(Node& n, const std::vector<Property>& props) {
     for (const Property& p : props) {
         const AttribValue& v = p.val;
         const std::string& key = p.key;
 
-        if (const float* f = std::get_if<float>(&v)) {
-            auto it = k_float_props.find(key);
-            if (it != k_float_props.end()) { it->second(n, *f); continue; }
+        // ── 1. Shorthand expansion ─────────────────────────────────────────
+        //
+        // "padding = 8" sets all four sides; "margin = 4 8" uses x/y shorthands
+        // from the Edges constructors.  Only float values make sense here.
+        //
+        if (key == "padding") {
+            if (const float* f = std::get_if<float>(&v)) n.padding(Edges(*f));
+            continue;
         }
-        else if (const bool* b = std::get_if<bool>(&v)) {
-            auto it = k_bool_props.find(key);
-            if (it != k_bool_props.end()) { it->second(n, *b); continue; }
-        }
-        else if (const std::wstring* w = std::get_if<std::wstring>(&v)) {
-            auto kit = k_keyword_props.find(key);
-            if (kit != k_keyword_props.end()) {
-                const KeywordProp& kp = kit->second;
-                auto vit = kp.values->find(*w);
-                if (vit != kp.values->end()) vit->second(n);
-                else                         kp.fallback(n);
-                continue;
-            }
+        if (key == "margin") {
+            if (const float* f = std::get_if<float>(&v)) n.margin(Edges(*f));
+            continue;
         }
 
-        // Everything else (Color, unrecognised keys) goes to the Attributes map.
-        n.attr().set(key, v);
+        // ── 2. Keyword/enum coercions ──────────────────────────────────────
+        //
+        // Enum-valued props are stored as float (integer cast) in attr so they
+        // fit in the AttribValue variant.  The accessors in inode.cpp cast back.
+        //
+        if (key == "direction") {
+            if (const std::wstring* w = std::get_if<std::wstring>(&v)) {
+                Direction d = (*w == L"row") ? Direction::Row : Direction::Column;
+                n.attr().set(Prop::Direction,
+                             static_cast<float>(static_cast<int>(d)));
+            }
+            continue;
+        }
+        if (key == "align") {
+            if (const std::wstring* w = std::get_if<std::wstring>(&v)) {
+                Align a = Align::Stretch;
+                if (*w == L"start")   a = Align::Start;
+                if (*w == L"center")  a = Align::Center;
+                if (*w == L"end")     a = Align::End;
+                n.attr().set(Prop::AlignItems,
+                             static_cast<float>(static_cast<int>(a)));
+            }
+            continue;
+        }
+        if (key == "justify") {
+            if (const std::wstring* w = std::get_if<std::wstring>(&v)) {
+                Justify j = Justify::Start;
+                if (*w == L"center")        j = Justify::Center;
+                if (*w == L"end")           j = Justify::End;
+                if (*w == L"space-between") j = Justify::SpaceBetween;
+                if (*w == L"space-around")  j = Justify::SpaceAround;
+                n.attr().set(Prop::JustifyItems,
+                             static_cast<float>(static_cast<int>(j)));
+            }
+            continue;
+        }
+        if (key == "text-align") {
+            if (const std::wstring* w = std::get_if<std::wstring>(&v)) {
+                TextAlign ta = TextAlign::Left;
+                if (*w == L"center")  ta = TextAlign::Center;
+                if (*w == L"right")   ta = TextAlign::Right;
+                if (*w == L"justify") ta = TextAlign::Justify;
+                n.attr().set(Prop::TextAlign,
+                             static_cast<float>(static_cast<int>(ta)));
+            }
+            continue;
+        }
+
+        // ── 3. Behaviour flags ─────────────────────────────────────────────
+        //
+        // focusable and draggable are stored directly on INode, not in attr.
+        //
+        if (key == "focusable") {
+            if (const bool* b = std::get_if<bool>(&v)) n.focusable(*b);
+            continue;
+        }
+        if (key == "draggable") {
+            if (const bool* b = std::get_if<bool>(&v)) n.draggable(*b);
+            continue;
+        }
+
+        // ── 4. Generic k_prop_map lookup ──────────────────────────────────
+        //
+        // All remaining recognised properties route directly through attr.set().
+        // Unknown keys are silently discarded — no arbitrary string storage.
+        //
+        auto it = k_prop_map.find(key);
+        if (it != k_prop_map.end())
+            n.attr().set(it->second, v);
     }
 }
 
 // Wire one event delta onto a node.
-// The lambda captures the delta by value so the StyleTable can be freed after load().
 static void wire_event(Node& n, const std::string& ev_name,
                        const StyleDelta& delta) {
     auto opt = lookup_event(ev_name);
@@ -443,9 +421,9 @@ static void wire_event(Node& n, const std::string& ev_name,
         std::cerr << "unknown event '" << ev_name << "' — skipped\n";
         return;
     }
-    StyleDelta captured = delta; // copy for lambda capture
-    n.on(*opt, [captured] (Node& self) {
-        apply_props(self, captured);
+    StyleDelta captured = delta;
+    n.on(*opt, [captured] (WeakNode self) {
+        apply_props(self.as(), captured);
     });
 }
 
@@ -459,8 +437,6 @@ static void build_node(Node& parent, const ASTNode& ast, const StyleTable& style
     Node& n = parent.push(it->second(parent, ast));
 
     // 1. Apply style templates in declaration order.
-    //    Each "apply" inlines the style's base props, then wires its event deltas.
-    //    Later local props will override what the template set.
     for (const std::string& style_name : ast.applies) {
         auto sit = styles.find(style_name);
         if (sit == styles.end()) {
@@ -475,14 +451,14 @@ static void build_node(Node& parent, const ASTNode& ast, const StyleTable& style
     // 2. Apply node-local base properties (override template props).
     apply_props(n, ast.props);
 
-    // 3. Wire node-local event deltas (override any same-event template delta).
+    // 3. Wire node-local event deltas.
     for (const auto& [ev_name, delta] : ast.event_styles)
         wire_event(n, ev_name, delta);
 
     // 4. Recurse into children.
     build_children(n, ast.children, styles);
 
-    // 5. Register named node for lookup via CORE.
+    // 5. Register named node.
     if (!ast.name.empty())
         CORE.register_named(ast.name, WeakNode(n.handle()));
 }
@@ -506,17 +482,14 @@ Node load(const char* path) {
     while (std::getline(file, ln))
         raw.push_back(std::move(ln));
 
-    // Preprocess
     auto vars = detail::extract_vars(raw);
     detail::apply_vars(raw, vars);
     auto lines = lex_lines(raw);
 
-    // Parse
     StyleTable styles;
     RDParser   p{ lines };
     ASTNode    root_ast = p.parse_document(styles);
 
-    // Build runtime tree
     Node root;
     apply_props(root, root_ast.props);
     build_children(root, root_ast.children, styles);

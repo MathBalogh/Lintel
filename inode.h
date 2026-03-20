@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core.h"   // also pulls in canvas.h via the include chain
+#include "core.h"   // pulls in lintel.h (Prop, Attributes, etc.) via the chain
 
 #include <algorithm>
 #include <array>
@@ -18,151 +18,192 @@ inline bool  is_auto(float v) { return std::isnan(v); }
 inline float nan_f() { return std::numeric_limits<float>::quiet_NaN(); }
 
 // ---------------------------------------------------------------------------
-// LayoutProps
-// ---------------------------------------------------------------------------
-//
-// Stores every layout-affecting parameter for a single node.  All values are
-// resolved per-frame; nothing is cached here.
-//
-struct LayoutProps {
-    float width = nan_f(); // NaN -> participate in flex-share distribution.
-    float height = nan_f(); // NaN -> participate in flex-share distribution.
-
-    Edges     padding = {};
-    Edges     margin = {};
-    Direction direction = Direction::Column;
-    Align     align_items = Align::Stretch;  // Cross-axis child alignment.
-    Justify   justify_items = Justify::Start;  // Main-axis child distribution.
-    float     gap = 0.f;             // Pixel gap between children.
-    float     share = 1.f;             // Main-axis share weight.
-};
-
-// ---------------------------------------------------------------------------
 // INode — internal node implementation
 // ---------------------------------------------------------------------------
 //
-// All tree state lives here.  The public Node class is just an owning handle
-// to an INode.  Input dispatch (mouse hit-testing, hover tracking, keyboard
-// routing, drag/focus management) is driven from Core::process_message and
-// calls the methods below.
+// LayoutProps has been removed.  Every layout-affecting parameter is now read
+// from INode::attr via the Prop enum (Prop::Width, Prop::PaddingTop, …).
+// Accessor methods below provide typed wrappers with sensible defaults:
 //
-// Drawing contract
-// ----------------
-// Every draw() override receives a Canvas& that owns the full D2D / DWrite
-// API surface for the current frame.  Nodes must not call GPU.d2d_context or
-// GPU.dwrite_factory from inside draw(); all rendering goes through Canvas.
+//   layout_width()    → Prop::Width,  default nan_f() (auto)
+//   layout_height()   → Prop::Height, default nan_f() (auto)
+//   layout_padding()  → Prop::Padding{Top,Right,Bottom,Left}, default 0
+//   layout_margin()   → Prop::Margin{Top,Right,Bottom,Left},  default 0
+//   layout_gap()      → Prop::Gap,    default 0
+//   layout_share()    → Prop::Share,  default 1
+//   layout_direction()→ Prop::Direction, default Direction::Column
+//   layout_align()    → Prop::AlignItems,  default Align::Stretch
+//   layout_justify()  → Prop::JustifyItems, default Justify::Start
+//
+// The public Node fluent setters (width(), padding(), …) call attr.set() with
+// the appropriate Prop key so the parser and programmatic API share one path.
+//
+// layout_dirty lives inside Attributes and is set automatically by attr.set()
+// whenever a box-model or layout-behavior property changes.  measure() checks
+// and clears it; if the flag is clear and the available space matches the
+// cached values from the previous frame the entire measure sub-tree is skipped.
 //
 class INode {
 public:
     virtual ~INode() = default;
 
-    LayoutProps          lp;
-    Rect                 rect = {};     // Computed by the layout pass.
-    WeakNode             parent;           // Non-owning reference to parent.
-    std::vector<Node>    children;
-    Attributes           attr;
+    // -- Handler storage -------------------------------------------------
 
-    bool focusable_flag = false; // Participates in Tab-order focus cycling.
-    bool draggable_flag = false; // Initiates drag sequences.
-    bool mouse_inside = false; // Set while the cursor is within rect.
+    struct HandlerEntry {
+        Event              type;
+        Node::EventHandler fn;
+    };
+    using HandlerList = std::vector<HandlerEntry>;
+
+    HandlerList       handlers_;
+
+    // -- Core state -------------------------------------------------------
+
+    Rect              rect = {};
+    WeakNode          parent;
+    std::vector<Node> children;
+    Attributes        attr;
+
+    bool focusable_flag = false;
+    bool draggable_flag = false;
+    bool mouse_inside = false;
+
+    // -- Layout cache (used by measure's early-exit guard) ----------------
+    //
+    // Stores the avail_w / avail_h values passed to the previous successful
+    // measure call.  If attr.layout_dirty is false and the available space
+    // matches, measure() returns immediately and reuses the cached rect.
+    //
+    float cached_avail_w_ = -1.f;
+    float cached_avail_h_ = -1.f;
+
+    // ── Layout accessors — read Prop values from attr ───────────────────
+
+    float     layout_width()     const;
+    float     layout_height()    const;
+    float     layout_gap()       const;
+    float     layout_share()     const;
+    Edges     layout_padding()   const;
+    Edges     layout_margin()    const;
+    Direction layout_direction() const;
+    Align     layout_align()     const;
+    Justify   layout_justify()   const;
+
+    // -- Handler registration --------------------------------------------
+
+    void add_handler(Event type, Node::EventHandler fn) {
+        handlers_.push_back({ type, std::move(fn) });
+    }
+
+    void remove_handlers(Event type) {
+        handlers_.erase(
+            std::remove_if(handlers_.begin(), handlers_.end(),
+            [type] (const HandlerEntry& e) { return e.type == type; }),
+            handlers_.end());
+    }
+
+    void invoke_handlers(WeakNode handle, Event type) const {
+        HandlerList snapshot = handlers_;
+        for (const HandlerEntry& e : snapshot)
+            if (e.type == type) e.fn(handle);
+    }
+
+    void fire(WeakNode self, Event type) {
+        invoke_handlers(self, type);
+    }
 
     // -- Layout pipeline -------------------------------------------------
 
-    /** @brief Compute rect.w / rect.h given the available slot dimensions. */
     virtual void measure(float avail_w, float avail_h);
-
-    /** @brief Assign rect.x / rect.y and recursively arrange children. */
     virtual void arrange(float slot_x, float slot_y);
-
-    /** @brief Convenience: measure then arrange in one call. */
-    void layout(float slot_x, float slot_y, float avail_w, float avail_h);
+    void         layout(float slot_x, float slot_y, float avail_w, float avail_h);
 
     // -- Draw pipeline ---------------------------------------------------
-    //
-    // canvas is the frame-scoped drawing surface owned by Core.  It is passed
-    // down the tree so every node draws through the same abstraction.
-    //
 
-    /**
-     * @brief Draw background fill and border using the node's attr values.
-     * Called at the top of draw() overrides before child content.
-     */
     void draw_default(Canvas& canvas);
-
-    /**
-     * @brief Full draw pass: draw_default then recurse into children.
-     * Overrides must call draw_default(canvas) and forward canvas to children.
-     */
     virtual void draw(Node& self, Canvas& canvas);
 
     // -- Geometry helpers ------------------------------------------------
 
-    float inner_w()   const; // Content-area width  (rect.w − h-padding).
-    float inner_h()   const; // Content-area height (rect.h − v-padding).
-    float content_x() const; // Absolute X of the content-area origin.
-    float content_y() const; // Absolute Y of the content-area origin.
-
-    // -- Handler registration --------------------------------------------
-
-    /** @brief Append a typed handler to the global registry. */
-    void add_handler(Event type, Node::EventHandler fn);
-
-    /** @brief Remove all handlers for type on this node. */
-    void remove_handlers(Event type);
-
-    /** @brief Fire all matching handlers via the global registry. */
-    void fire(Node& self, Event type);
+    float inner_w()   const;
+    float inner_h()   const;
+    float content_x() const;
+    float content_y() const;
 
     // -- Tree utilities --------------------------------------------------
 
-    /**
-     * @brief Depth-first hit test.
-     * @return Pointer to the Node handle of the deepest descendant (or self)
-     *         whose rect contains (sx, sy), or nullptr on a miss.
-     */
     Node* find_hit(Node& self, float sx, float sy);
-
-    /**
-     * @brief Full-tree hover update.
-     * Re-evaluates mouse_inside for self and all descendants, firing
-     * MouseEnter / MouseLeave as appropriate.
-     * @param sx / sy  Window client coordinates.
-     */
-    void update_hover(Node& self, float sx, float sy);
-
-    /**
-     * @brief Bubble an event up the parent chain.
-     * Does not fire on from_impl itself — the caller has already done that.
-     * Re-localises mouse_x / mouse_y at each ancestor level.
-     */
+    void   update_hover(WeakNode self, float sx, float sy);
     static void bubble_up(INode* from_impl, Event type);
 
     // -- Focus utilities -------------------------------------------------
 
-    /**
-     * @brief Transfer keyboard focus to target.
-     * Fires Blur on the outgoing node and Focus on the incoming node.
-     * Passing a null WeakNode clears focus without firing Focus.
-     */
     static void set_focus(WeakNode target);
-
-    /**
-     * @brief Advance keyboard focus to the next focusable node in document
-     *        order, wrapping around.  Used by the Tab key handler.
-     */
     static void focus_next(Node& tree_root);
 
 private:
-    // Layout sub-routines.
-    void arrange_column();
-    void arrange_row();
-    float resolve_cross_x(INode* child, float inner_width);
-    float resolve_cross_y(INode* child, float inner_height);
+    void   arrange_column();
+    void   arrange_row();
+    float  resolve_cross_x(INode* child, float inner_width);
+    float  resolve_cross_y(INode* child, float inner_height);
 
-    // Focus helpers.
     static void collect_focusable(INode* node, std::vector<INode*>& out);
 };
 
 template class Impl<INode>;
+
+// ---------------------------------------------------------------------------
+// Fire helpers — inline definitions
+// ---------------------------------------------------------------------------
+
+inline void fire_with_context(
+    INode* impl, WeakNode handle,
+    Event type, float local_x, float local_y,
+    MouseButton btn, Modifiers mods,
+    float scroll_dx = 0.0f, float scroll_dy = 0.0f) {
+    InputState& inp = CORE.input;
+    inp.mouse_x = local_x;
+    inp.mouse_y = local_y;
+    inp.held = btn;
+    inp.modifiers = mods;
+    inp.scroll_dx = scroll_dx;
+    inp.scroll_dy = scroll_dy;
+    inp.key_vkey = 0;
+    inp.key_repeat = false;
+    inp.key_char = L'\0';
+
+    impl->invoke_handlers(handle, type);
+    impl->invoke_handlers(handle, Event::Any);
+}
+
+inline void fire_key_context(
+    INode* impl, WeakNode handle,
+    Event type, int vkey, bool repeat, Modifiers mods) {
+    InputState& inp = CORE.input;
+    inp.key_vkey = vkey;
+    inp.key_repeat = repeat;
+    inp.key_char = L'\0';
+    inp.modifiers = mods;
+    inp.scroll_dx = 0.f;
+    inp.scroll_dy = 0.f;
+
+    impl->invoke_handlers(handle, type);
+    impl->invoke_handlers(handle, Event::Any);
+}
+
+inline void fire_char_context(
+    INode* impl, WeakNode handle,
+    wchar_t ch, Modifiers mods) {
+    InputState& inp = CORE.input;
+    inp.key_char = ch;
+    inp.key_vkey = 0;
+    inp.key_repeat = false;
+    inp.modifiers = mods;
+    inp.scroll_dx = 0.f;
+    inp.scroll_dy = 0.f;
+
+    impl->invoke_handlers(handle, Event::Char);
+    impl->invoke_handlers(handle, Event::Any);
+}
 
 } // namespace lintel

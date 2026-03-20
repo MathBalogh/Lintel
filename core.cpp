@@ -11,37 +11,6 @@ using time_point = std::chrono::steady_clock::time_point;
 namespace lintel {
 
 // ---------------------------------------------------------------------------
-// Animator
-// ---------------------------------------------------------------------------
-
-void Animator::push(const AnimationItem& item) {
-    if (!free_indices.empty()) {
-        size_t index = free_indices.back();
-        free_indices.pop_back();
-        items[index] = item;
-    }
-    else {
-        items.push_back(item);
-    }
-}
-void Animator::step(float delta_time) {
-    for (size_t i = 0; i < items.size(); ++i) {
-        auto& item = items[i];
-        if (item.property_address) {
-            (*item.property_address) = item.begin + (item.end - item.begin) * (item.t / item.duration);
-
-            item.t += delta_time;
-
-            if (item.t >= item.duration) {
-                (*item.property_address) = item.end;
-                item.property_address = nullptr;
-                free_indices.push_back(i);
-            }
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Internal helpers (file-local)
 // ---------------------------------------------------------------------------
 
@@ -125,8 +94,6 @@ void Core::start() {
             while (try_pop(msg))
                 process_message(msg.msg, msg.wp, msg.lp);
 
-            animator.step(ui_tick_dts);
-
             process_default();
         }
     });
@@ -151,8 +118,8 @@ void Core::process_message(UINT msg, WPARAM wp, LPARAM lp) {
 
         case WM_SIZE:
         {
-            root_impl->lp.width = (float) win->client_width();
-            root_impl->lp.height = (float) win->client_height();
+            root_impl->attr.set(Prop::Width, (float) win->client_width());
+            root_impl->attr.set(Prop::Height, (float) win->client_height());
             win->resize_swapchain();
             break;
         }
@@ -179,16 +146,15 @@ void Core::process_message(UINT msg, WPARAM wp, LPARAM lp) {
 
             // Update per-node mouse_inside flags; fire MouseEnter / MouseLeave.
             if (root_impl)
-                root_impl->update_hover(root, sx, sy);
+                root_impl->update_hover(WeakNode(root), sx, sy);
 
             // -- Drag --
             if (pointer.drag_active) {
                 // Ongoing drag: fire Drag on the source node.
                 if (pointer.drag_src) {
                     INode* src = pointer.drag_src.handle<INode>();
-                    Node& src_hdl = pointer.drag_src.as<Node>();
                     if (src) {
-                        fire_with_context(src, src_hdl, Event::Drag,
+                        fire_with_context(src, pointer.drag_src, Event::Drag,
                                           sx - src->content_x(), sy - src->content_y(),
                                           pointer.drag_btn, mods);
                         INode::bubble_up(src, Event::Drag);
@@ -208,9 +174,8 @@ void Core::process_message(UINT msg, WPARAM wp, LPARAM lp) {
 
                     if (pointer.drag_src) {
                         INode* src = pointer.drag_src.handle<INode>();
-                        Node& src_hdl = pointer.drag_src.as<Node>();
                         if (src) {
-                            fire_with_context(src, src_hdl, Event::DragStart,
+                            fire_with_context(src, pointer.drag_src, Event::DragStart,
                                               sx - src->content_x(), sy - src->content_y(),
                                               pointer.drag_btn, mods);
                             INode::bubble_up(src, Event::DragStart);
@@ -223,7 +188,7 @@ void Core::process_message(UINT msg, WPARAM wp, LPARAM lp) {
                 if (root_impl) {
                     if (Node* hit = root_impl->find_hit(root, sx, sy)) {
                         INode* hi = hit->handle<INode>();
-                        fire_with_context(hi, *hit, Event::MouseMove,
+                        fire_with_context(hi, WeakNode(hi), Event::MouseMove,
                                           sx - hi->content_x(), sy - hi->content_y(),
                                           pointer.press_btn, mods);
                         INode::bubble_up(hi, Event::MouseMove);
@@ -241,7 +206,7 @@ void Core::process_message(UINT msg, WPARAM wp, LPARAM lp) {
             win->tracking_mouse = false;
             // Pass a point guaranteed to miss every node rect.
             if (root_impl)
-                root_impl->update_hover(root, -1.f, -1.f);
+                root_impl->update_hover(WeakNode(root), -1.f, -1.f);
             break;
 
             // -----------------------------------------------------------------------
@@ -274,7 +239,7 @@ void Core::process_message(UINT msg, WPARAM wp, LPARAM lp) {
                 pointer.press_sy = sy;
                 pointer.drag_pending = hi->draggable_flag;
 
-                fire_with_context(hi, *hit, Event::MouseDown,
+                fire_with_context(hi, WeakNode(hi), Event::MouseDown,
                                   sx - hi->content_x(), sy - hi->content_y(), btn, mods);
                 INode::bubble_up(hi, Event::MouseDown);
             }
@@ -299,9 +264,8 @@ void Core::process_message(UINT msg, WPARAM wp, LPARAM lp) {
                 pointer.drag_active = false;
                 if (pointer.drag_src) {
                     INode* src = pointer.drag_src.handle<INode>();
-                    Node& src_hdl = pointer.drag_src.as<Node>();
                     if (src) {
-                        fire_with_context(src, src_hdl, Event::DragEnd,
+                        fire_with_context(src, pointer.drag_src, Event::DragEnd,
                                           sx - src->content_x(), sy - src->content_y(), btn, mods);
                     }
                 }
@@ -312,14 +276,14 @@ void Core::process_message(UINT msg, WPARAM wp, LPARAM lp) {
                 if (Node* hit = root_impl ? root_impl->find_hit(root, sx, sy) : nullptr) {
                     INode* hi = hit->handle<INode>();
 
-                    fire_with_context(hi, *hit, Event::MouseUp,
+                    fire_with_context(hi, WeakNode(hi), Event::MouseUp,
                                       sx - hi->content_x(), sy - hi->content_y(), btn, mods);
                     INode::bubble_up(hi, Event::MouseUp);
 
                     // Click fires only when the release is on the same node as the press.
                     if (hi == pointer.pressed.handle<INode>()) {
                         if (btn == MouseButton::Right) {
-                            fire_with_context(hi, *hit, Event::RightClick,
+                            fire_with_context(hi, WeakNode(hi), Event::RightClick,
                                               sx - hi->content_x(), sy - hi->content_y(), btn, mods);
                             INode::bubble_up(hi, Event::RightClick);
                         }
@@ -333,13 +297,13 @@ void Core::process_message(UINT msg, WPARAM wp, LPARAM lp) {
                             const bool  in_time = (now - pointer.last_click_ms) <= GetDoubleClickTime();
 
                             if (same_node && close_pos && in_time) {
-                                fire_with_context(hi, *hit, Event::DoubleClick,
+                                fire_with_context(hi, WeakNode(hit->handle()), Event::DoubleClick,
                                                   sx - hi->content_x(), sy - hi->content_y(), btn, mods);
                                 INode::bubble_up(hi, Event::DoubleClick);
                                 pointer.last_click_ms = 0; // reset so a third click is a new single
                             }
                             else {
-                                fire_with_context(hi, *hit, Event::Click,
+                                fire_with_context(hi, WeakNode(hit->handle()), Event::Click,
                                                   sx - hi->content_x(), sy - hi->content_y(), btn, mods);
                                 INode::bubble_up(hi, Event::Click);
 
@@ -379,7 +343,7 @@ void Core::process_message(UINT msg, WPARAM wp, LPARAM lp) {
             if (root_impl) {
                 if (Node* hit = root_impl->find_hit(root, sx, sy)) {
                     INode* hi = hit->handle<INode>();
-                    fire_with_context(hi, *hit, Event::Scroll,
+                    fire_with_context(hi, WeakNode(hi), Event::Scroll,
                                       sx - hi->content_x(), sy - hi->content_y(),
                                       MouseButton::None, mods,
                                       0.f, delta);
@@ -406,7 +370,7 @@ void Core::process_message(UINT msg, WPARAM wp, LPARAM lp) {
             if (root_impl) {
                 if (Node* hit = root_impl->find_hit(root, sx, sy)) {
                     INode* hi = hit->handle<INode>();
-                    fire_with_context(hi, *hit, Event::Scroll,
+                    fire_with_context(hi, WeakNode(hi), Event::Scroll,
                                       sx - hi->content_x(), sy - hi->content_y(),
                                       MouseButton::None, mods,
                                       delta, 0.f);
@@ -434,9 +398,8 @@ void Core::process_message(UINT msg, WPARAM wp, LPARAM lp) {
 
             if (focus.focused) {
                 INode* fi = focus.focused.handle<INode>();
-                Node& fi_hdl = focus.focused.as<Node>();
                 if (fi) {
-                    fire_key_context(fi, fi_hdl, Event::KeyDown, vkey, repeat, mods);
+                    fire_key_context(fi, focus.focused, Event::KeyDown, vkey, repeat, mods);
                     INode::bubble_up(fi, Event::KeyDown);
                 }
             }
@@ -455,9 +418,8 @@ void Core::process_message(UINT msg, WPARAM wp, LPARAM lp) {
 
             if (focus.focused) {
                 INode* fi = focus.focused.handle<INode>();
-                Node& fi_hdl = focus.focused.as<Node>();
                 if (fi) {
-                    fire_key_context(fi, fi_hdl, Event::KeyUp, vkey, false, mods);
+                    fire_key_context(fi, focus.focused, Event::KeyUp, vkey, false, mods);
                     INode::bubble_up(fi, Event::KeyUp);
                 }
             }
@@ -475,9 +437,8 @@ void Core::process_message(UINT msg, WPARAM wp, LPARAM lp) {
 
             if (focus.focused) {
                 INode* fi = focus.focused.handle<INode>();
-                Node& fi_hdl = focus.focused.as<Node>();
                 if (fi) {
-                    fire_char_context(fi, fi_hdl, ch, mods);
+                    fire_char_context(fi, focus.focused, ch, mods);
                     INode::bubble_up(fi, Event::Char);
                 }
             }

@@ -127,8 +127,4 @@ float       scroll_dy() { return CORE.input.scroll_dy; }
 
 WeakNode find(const char* name) { return CORE.get_named(name); }
 
-void animate(float* property, float begin, float end, float duration) {
-    CORE.animator.push(AnimationItem{ property, begin, end, duration, 0 });
-}
-
 } // namespace lintel

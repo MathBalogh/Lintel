@@ -24,16 +24,6 @@
 namespace lintel {
 
 // ---------------------------------------------------------------------------
-// Forward declaration
-// ---------------------------------------------------------------------------
-//
-// Bridges fire_with_context / fire_key_context / fire_char_context (defined
-// below as inline helpers) to the EventRegistry without requiring core.h to
-// include inode.h.  Implemented in inode.cpp.
-//
-void inode_invoke_handlers(class INode* impl, Node& handle, Event type);
-
-// ---------------------------------------------------------------------------
 // InputState
 // ---------------------------------------------------------------------------
 //
@@ -90,53 +80,6 @@ struct PointerState {
 };
 
 // ---------------------------------------------------------------------------
-// EventRegistry
-// ---------------------------------------------------------------------------
-//
-// Stores all (node, event-type) -> handler bindings.  Handlers are invoked in
-// registration order.  The handler list is snapshot-copied before iteration so
-// add / remove calls inside a handler are safe.
-//
-struct EventRegistry {
-    struct Entry {
-        Event              type;
-        Node::EventHandler fn;
-    };
-
-    using HandlerList = std::vector<Entry>;
-    std::unordered_map<class INode*, HandlerList> table;
-
-    void add(class INode* node, Event type, Node::EventHandler fn) {
-        table[node].push_back({ type, std::move(fn) });
-    }
-
-    void remove(class INode* node, Event type) {
-        auto it = table.find(node);
-        if (it == table.end()) return;
-
-        HandlerList& list = it->second;
-        list.erase(std::remove_if(list.begin(), list.end(),
-                   [type] (const Entry& e) { return e.type == type; }), list.end());
-
-        if (list.empty()) table.erase(it);
-    }
-
-    // Invoke all matching handlers.  handle is the public Node& passed into
-    // each callback.  The handler list is copied before iteration.
-    void fire(class INode* node, Node& handle, Event type) const {
-        auto it = table.find(node);
-        if (it == table.end()) return;
-
-        HandlerList snapshot = it->second; // copy — handlers may mutate table
-        for (const Entry& e : snapshot) {
-            if (e.type == type) e.fn(handle);
-        }
-    }
-
-    void clear_node(class INode* node) { table.erase(node); }
-};
-
-// ---------------------------------------------------------------------------
 // WindowMessage
 // ---------------------------------------------------------------------------
 
@@ -147,30 +90,14 @@ struct WindowMessage {
 };
 
 // ---------------------------------------------------------------------------
-// AnimationQueue
-// ---------------------------------------------------------------------------
-
-struct AnimationItem {
-    float* property_address;
-    float begin;    // Initial value
-    float end;      // Terminal value
-    float duration; // Animation duration
-    float t;        // Current time
-};
-struct Animator {
-    std::vector<AnimationItem> items;
-    std::vector<size_t> free_indices;
-
-    void push(const AnimationItem& item);
-    void step(float delta_time);
-};
-
-// ---------------------------------------------------------------------------
 // Core
 // ---------------------------------------------------------------------------
 //
-// Singleton that owns the GPU context, the Canvas drawing abstraction, the
-// event registry, and all global input / focus / pointer state.
+// Singleton that owns the GPU context, the Canvas drawing abstraction, and all
+// global input / focus / pointer state.
+//
+// The EventRegistry has been removed: handlers are now stored directly on each
+// INode instance (see INode::handlers_ in inode.h).
 //
 // Member declaration order matters: gpu must precede canvas because Canvas
 // stores a GpuContext& that is bound at construction time.
@@ -206,8 +133,6 @@ public:
     InputState    input;
     FocusState    focus;
     PointerState  pointer;
-    EventRegistry registry;
-    Animator      animator;
 
     WeakImpl<Window> window;
     Node             root;
@@ -242,66 +167,29 @@ public:
 };
 
 // ---------------------------------------------------------------------------
-// Fire helpers
+// Fire helpers — forward declarations
 // ---------------------------------------------------------------------------
 //
-// Write the appropriate InputState fields then invoke the handlers for the
-// given event type (and Event::Any) on impl via the global registry.
+// INode is an incomplete type at this point in the translation unit.
+// The inline definitions live at the bottom of inode.h, which is always
+// included after core.h and sees the full INode definition.
 //
 
 // Mouse and scroll events.
 inline void fire_with_context(
-    INode* impl, Node& handle,
+    class INode* impl, WeakNode handle,
     Event type, float local_x, float local_y,
     MouseButton btn, Modifiers mods,
-    float scroll_dx = 0.f, float scroll_dy = 0.f) {
-    InputState& inp = CORE.input;
-    inp.mouse_x = local_x;
-    inp.mouse_y = local_y;
-    inp.held = btn;
-    inp.modifiers = mods;
-    inp.scroll_dx = scroll_dx;
-    inp.scroll_dy = scroll_dy;
-    // Clear keyboard fields so stale values are never visible in a mouse handler.
-    inp.key_vkey = 0;
-    inp.key_repeat = false;
-    inp.key_char = L'\0';
-
-    inode_invoke_handlers(impl, handle, type);
-    inode_invoke_handlers(impl, handle, Event::Any);
-}
+    float scroll_dx, float scroll_dy);
 
 // KeyDown / KeyUp events.
 inline void fire_key_context(
-    INode* impl, Node& handle,
-    Event type, int vkey, bool repeat, Modifiers mods) {
-    InputState& inp = CORE.input;
-    inp.key_vkey = vkey;
-    inp.key_repeat = repeat;
-    inp.key_char = L'\0';
-    inp.modifiers = mods;
-    // Clear scroll so stale values are never visible in a key handler.
-    inp.scroll_dx = 0.f;
-    inp.scroll_dy = 0.f;
-
-    inode_invoke_handlers(impl, handle, type);
-    inode_invoke_handlers(impl, handle, Event::Any);
-}
+    class INode* impl, WeakNode handle,
+    Event type, int vkey, bool repeat, Modifiers mods);
 
 // Char events.
 inline void fire_char_context(
-    INode* impl, Node& handle,
-    wchar_t ch, Modifiers mods) {
-    InputState& inp = CORE.input;
-    inp.key_char = ch;
-    inp.key_vkey = 0;
-    inp.key_repeat = false;
-    inp.modifiers = mods;
-    inp.scroll_dx = 0.f;
-    inp.scroll_dy = 0.f;
-
-    inode_invoke_handlers(impl, handle, Event::Char);
-    inode_invoke_handlers(impl, handle, Event::Any);
-}
+    class INode* impl, WeakNode handle,
+    wchar_t ch, Modifiers mods);
 
 } // namespace lintel

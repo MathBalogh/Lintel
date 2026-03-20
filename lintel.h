@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+#include <bitset>
 #include <functional>
 #include <initializer_list>
 #include <string>
@@ -13,40 +15,92 @@
 namespace lintel {
 
 // ---------------------------------------------------------------------------
-// Standard property keys
+// Prop — unified property key enum
 // ---------------------------------------------------------------------------
 //
-// Use these string constants with Attributes::set() / get() / has() to avoid
-// typo-prone bare string literals at call sites.
+// Every addressable property on a node has a single Prop enumerator.  Values
+// in [0, k_hot_count) are "hot": stored in a flat std::array for O(1)
+// indexed access with no hashing.  Values >= k_hot_count are "cold": stored
+// in an overflow unordered_map and used only for node-specific or rarely-read
+// properties.
 //
-namespace attribs {
+// Three categories of hot properties (layout-affecting ones marked with ★):
+//
+//   Visual       BackgroundColor … FontFamily        indices  0–6
+//   Box model ★  Width … Share                       indices  7–18
+//   Layout beh ★ Direction … JustifyItems            indices 19–21
+//
+// Cold properties cover text formatting and graph-specific styling that do
+// not affect the base layout pipeline.
+//
+enum class Prop : uint32_t {
+    // ── Visual (hot) ──────────────────────────────────────────────────────
+    BackgroundColor = 0,
+    BorderColor = 1,
+    BorderWeight = 2,
+    CornerRadius = 3,
+    TextColor = 4,
+    FontSize = 5,
+    FontFamily = 6,
 
-// Box model
-constexpr char background_color[] = "background-color"; // Color
-constexpr char border_color[] = "border-color";     // Color
-constexpr char border_weight[] = "border-weight";    // float (px)
-constexpr char corner_radius[] = "corner-radius";    // float (px)
-constexpr char opacity[] = "opacity";          // float [0, 1]
+    // ── Box model (hot, layout-affecting) ─────────────────────────────────
+    Width = 7,
+    Height = 8,
+    PaddingTop = 9,
+    PaddingRight = 10,
+    PaddingBottom = 11,
+    PaddingLeft = 12,
+    MarginTop = 13,
+    MarginRight = 14,
+    MarginBottom = 15,
+    MarginLeft = 16,
+    Gap = 17,
+    Share = 18,
 
-// Text
-constexpr char editable[] = "editable";         // bool
-constexpr char font_size[] = "font-size";        // float (pt)
-constexpr char font_family[] = "font-family";      // std::wstring
-constexpr char text_color[] = "text-color";       // Color
-constexpr char bold[] = "bold";             // bool
-constexpr char italic[] = "italic";           // bool
-constexpr char wrap[] = "wrap";             // bool
-constexpr char text_align[] = "text-align";       // TextAlign
+    // ── Layout behavior (hot, layout-affecting) ───────────────────────────
+    Direction = 19,
+    AlignItems = 20,
+    JustifyItems = 21,
 
-// Graph / chart
-constexpr char line_color[] = "line-color";       // Color
-constexpr char line_weight[] = "line-weight";      // float (px)
-constexpr char grid_color[] = "grid-color";       // Color
-constexpr char grid_weight[] = "grid-weight";      // float (px)
-constexpr char label_color[] = "label-color";      // Color
-constexpr char label_font_size[] = "label-font-size";  // float (pt)
+    // ── Sentinel: first index that is cold ────────────────────────────────
+    k_hot_count = 22,
 
-} // namespace attribs
+    // ── Cold (node-specific / rarely read) ────────────────────────────────
+    // Text
+    Bold = 22,
+    Italic = 23,
+    Wrap = 24,
+    TextAlign = 25,
+    Editable = 26,
+    // Graph / chart
+    GridColor = 27,
+    GridWeight = 28,
+    LabelColor = 29,
+    LabelFontSize = 30,
+    // Misc
+    Opacity = 31,
+};
+
+// Returns true for properties that belong to the box-model or layout-behavior
+// categories.  Attributes::set() sets layout_dirty when this returns true.
+inline bool is_layout_prop(Prop p) noexcept {
+    switch (p) {
+        case Prop::Width:
+        case Prop::Height:
+        case Prop::PaddingTop:    case Prop::PaddingRight:
+        case Prop::PaddingBottom: case Prop::PaddingLeft:
+        case Prop::MarginTop:     case Prop::MarginRight:
+        case Prop::MarginBottom:  case Prop::MarginLeft:
+        case Prop::Gap:
+        case Prop::Share:
+        case Prop::Direction:
+        case Prop::AlignItems:
+        case Prop::JustifyItems:
+            return true;
+        default:
+            return false;
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Color
@@ -74,51 +128,113 @@ struct Color {
 // ---------------------------------------------------------------------------
 // Attributes
 // ---------------------------------------------------------------------------
+//
+// Unified property store.  Hot properties (index < k_hot_count) are read
+// and written through a flat std::array with a companion std::bitset that
+// tracks populated slots — no hashing, no cache-miss on every frame.  Cold
+// properties use an unordered_map keyed by the raw Prop integer value.
+//
+// layout_dirty is set automatically by set() whenever a box-model or layout-
+// behavior property changes.  INode::measure() reads and clears this flag to
+// skip subtrees that have not changed since the last layout pass.
+//
 
 using AttribValue = std::variant<float, Color, bool, std::wstring>;
 
+static constexpr uint32_t k_hot_count = static_cast<uint32_t>(Prop::k_hot_count);
+
 class Attributes {
-    std::unordered_map<std::string, AttribValue> props_;
+    // Hot storage: array of variants + populated bitset.
+    // Default-constructed AttribValue holds float(0.f) (first variant type).
+    std::array<AttribValue, k_hot_count> hot_;
+    std::bitset<k_hot_count>             hot_set_;
+
+    // Cold storage: map from Prop integer to value.
+    std::unordered_map<uint32_t, AttribValue> cold_;
 
 public:
+    // True after any box-model or layout-behavior prop is set.
+    // Read and cleared by INode::measure().
+    bool layout_dirty = true;
 
-    // Insert or replace a value.
-    Attributes& set(std::string_view key, AttribValue value) {
-        props_[std::string(key)] = std::move(value);
+    // ── Mutation ─────────────────────────────────────────────────────────
+
+    Attributes& set(Prop p, AttribValue value) {
+        const uint32_t idx = static_cast<uint32_t>(p);
+        if (idx < k_hot_count) {
+            hot_[idx] = std::move(value);
+            hot_set_.set(idx);
+        }
+        else {
+            cold_[idx] = std::move(value);
+        }
+        if (is_layout_prop(p)) layout_dirty = true;
         return *this;
     }
 
-    // Remove a key; subsequent has() calls return false.
-    Attributes& unset(std::string_view key) {
-        props_.erase(std::string(key));
+    Attributes& unset(Prop p) {
+        const uint32_t idx = static_cast<uint32_t>(p);
+        if (idx < k_hot_count) hot_set_.reset(idx);
+        else                   cold_.erase(idx);
         return *this;
     }
 
-    // True when the key has a stored entry.
-    bool has(std::string_view key) const {
-        return props_.count(std::string(key)) != 0;
-    }
+    // ── Query ─────────────────────────────────────────────────────────────
 
-    // Pointer to the stored value as type T, or nullptr on type/key mismatch.
-    template<typename T>
-    T* get(std::string_view key) {
-        auto it = props_.find(std::string(key));
-        if (it == props_.end()) return nullptr;
-        return std::get_if<T>(&it->second);
+    bool has(Prop p) const noexcept {
+        const uint32_t idx = static_cast<uint32_t>(p);
+        if (idx < k_hot_count) return hot_set_.test(idx);
+        return cold_.count(idx) != 0;
     }
 
     template<typename T>
-    const T* get(std::string_view key) const {
-        auto it = props_.find(std::string(key));
-        if (it == props_.end()) return nullptr;
-        return std::get_if<T>(&it->second);
+    const T* get(Prop p) const {
+        const uint32_t idx = static_cast<uint32_t>(p);
+        if (idx < k_hot_count) {
+            if (!hot_set_.test(idx)) return nullptr;
+            return std::get_if<T>(&hot_[idx]);
+        }
+        auto it = cold_.find(idx);
+        return (it == cold_.end()) ? nullptr : std::get_if<T>(&it->second);
     }
 
-    // Stored value as type T, or fallback when the key is absent or mistyped.
     template<typename T>
-    T get_or(std::string_view key, const T& fallback) const {
-        if (const T* v = get<T>(key)) return *v;
+    T* get(Prop p) {
+        const uint32_t idx = static_cast<uint32_t>(p);
+        if (idx < k_hot_count) {
+            if (!hot_set_.test(idx)) return nullptr;
+            return std::get_if<T>(&hot_[idx]);
+        }
+        auto it = cold_.find(idx);
+        return (it == cold_.end()) ? nullptr : std::get_if<T>(&it->second);
+    }
+
+    template<typename T>
+    T get_or(Prop p, const T& fallback) const {
+        if (const T* v = get<T>(p)) return *v;
         return fallback;
+    }
+
+    // ── Live pointer for animation targets ───────────────────────────────
+    //
+    // Returns a stable pointer to a float-valued slot, initialising it to 0
+    // if not yet set.  Used by Node::margin_bottom() and similar escape
+    // hatches that hand a raw pointer to an animation system.
+    //
+    float* float_ref(Prop p) {
+        const uint32_t idx = static_cast<uint32_t>(p);
+        if (idx < k_hot_count) {
+            if (!hot_set_.test(idx)) {
+                hot_[idx] = 0.f;
+                hot_set_.set(idx);
+            }
+            return std::get_if<float>(&hot_[idx]);
+        }
+        // Cold path: emplace if absent, then return pointer.
+        auto [it, inserted] = cold_.emplace(idx, 0.f);
+        if (!inserted && !std::holds_alternative<float>(it->second))
+            it->second = 0.f;
+        return std::get_if<float>(&it->second);
     }
 };
 
@@ -139,6 +255,9 @@ struct Edges {
     Edges() noexcept;
     Edges(float all) noexcept;
     Edges(float x_axis, float y_axis) noexcept;
+    // Individual-side constructor used by layout accessors.
+    Edges(float top_, float right_, float bottom_, float left_) noexcept
+        : top(top_), right(right_), bottom(bottom_), left(left_) {}
 
     float horizontal() const; // left + right
     float vertical()   const; // top  + bottom
@@ -172,12 +291,9 @@ enum class Justify {
 // Text alignment
 // ---------------------------------------------------------------------------
 //
-// Controls how text runs are positioned within the layout box on the
-// horizontal axis.  Applied to an ITextNode via TextNode::text_align() or
-// through Attributes::set(attribs::text_align, TextAlign::Center).
-//
 // Maps 1-to-1 onto DWRITE_TEXT_ALIGNMENT so that HitTestPoint coordinates
-// remain consistent with what is visually rendered.
+// remain consistent with what is rendered.  Stored in attr as a float
+// (integer cast) via Prop::TextAlign; sync_style() casts back to this enum.
 //
 enum class TextAlign {
     Left,    // DWRITE_TEXT_ALIGNMENT_LEADING  (default)
@@ -209,30 +325,26 @@ enum class Event {
     Click, DoubleClick, RightClick,
     Scroll,
     // Focus
-    Focus, // Gained keyboard focus (via click or Tab).
-    Blur,  // Lost keyboard focus.
-    // Keyboard - routed to the focused node, then bubbled.
+    Focus,
+    Blur,
+    // Keyboard
     KeyDown, KeyUp, Char,
-    // Drag - fired exclusively on the drag-source node.
+    // Drag
     DragStart, Drag, DragEnd,
-    // Receives every event type.
+    // Wildcard
     Any,
 };
 
 // ---------------------------------------------------------------------------
 // Node
 // ---------------------------------------------------------------------------
-//
-// Public handle to a UI tree node.  Lightweight, move-only.  The actual tree
-// state lives in INode; this class is just a typed owning pointer.
-//
 
 class Node : public Impl<class INode> {
 public:
-    using EventHandler = std::function<void(Node&)>;
+    using EventHandler = std::function<void(WeakImpl<Node>)>;
 
-    Node();                         // Allocate a default INode.
-    explicit Node(std::nullptr_t);  // Null handle; no allocation.
+    Node();
+    explicit Node(std::nullptr_t);
     ~Node();
 
     Node(Node&&) noexcept;
@@ -245,145 +357,67 @@ public:
 
     // -- Tree ------------------------------------------------------------
 
-    // Transfer ownership of child into this node, detaching it from its
-    // current parent first if necessary.  Returns a reference to the child.
     Node& push(Node&& child);
-
-    // Allocate and append a new default child.  Returns a reference to it.
     Node& push();
-
-    // Remove child from this node and return ownership to the caller.
-    Node remove(Node& child);
-
-    // Indexed child access.  Returns nullptr when index is out of range.
+    Node  remove(Node& child);
     Node* child(size_t index);
 
     // -- Layout ----------------------------------------------------------
 
-    // Proportion of the parent's remaining main-axis space claimed by this
-    // node relative to the sum of all siblings' shares.  Ignored when an
-    // explicit pixel size is set on that axis.
     Node& share(float s = 1.f);
     Node& width(float w);
     Node& height(float h);
-
     Node& padding(Edges e);
     Node& margin(Edges e);
     Node& row();
     Node& column();
-
-    // Cross-axis alignment of children.  Default: Stretch.
     Node& align(Align a);
-
-    // Main-axis distribution of remaining space once share allocation is
-    // done.  Only meaningful when all children have explicit sizes.
     Node& justify(Justify j);
-
-    // Pixel gap between children on the main axis.
     Node& gap(float g);
 
     // -- Behaviour -------------------------------------------------------
 
-    // Mark this node as keyboard-focusable (participates in Tab-order cycling).
     Node& focusable(bool f = true);
-
-    // Enable drag events.  Once the cursor exceeds the drag threshold after
-    // MouseDown, DragStart / Drag / DragEnd replace the normal Click sequence.
     Node& draggable(bool d = true);
 
     // -- Events ----------------------------------------------------------
 
-    // Append a handler for type.  Multiple handlers accumulate in order.
     Node& on(Event type, EventHandler handler);
-
-    // Remove all handlers for type on this node.
-    void clear_on_of(Event type);
+    void  clear_on_of(Event type);
 
     // -- Query -----------------------------------------------------------
 
     float* margin_bottom();
-    Rect  rect()    const;
-
-    // Relative to this node's content origin.
-    float mouse_x() const;
-    float mouse_y() const;
+    Rect   rect()    const;
+    float  mouse_x() const;
+    float  mouse_y() const;
 };
 using WeakNode = WeakImpl<Node>;
 
 // ---------------------------------------------------------------------------
 // TextNode
 // ---------------------------------------------------------------------------
-//
-// A node that renders and (optionally) edits a wstring.  Supports:
-//   - Keyboard editing  (editable == true)
-//   - Click-to-position cursor placement
-//   - Click-drag and Shift+arrow text selection with highlight rendering
-//   - Ctrl+Left / Ctrl+Right word-boundary movement
-//   - Shift+Home / Shift+End to extend selection to line boundaries
-//   - Ctrl+A to select all
-//   - Text alignment (left / center / right / justify)
-//
+
 class TextNode : public Node {
 public:
     TextNode();
     explicit TextNode(std::wstring_view content);
 
-    // -- Content ---------------------------------------------------------
-
     TextNode& content(std::wstring_view c);
-
-    // -- Text alignment --------------------------------------------------
-
-    // Set the horizontal alignment of text runs within the layout box.
-    // Wraps attribs::text_align; invalidates the DWrite format so that the
-    // next draw picks up the change immediately.
     TextNode& text_align(TextAlign a);
-
-    // -- Selection -------------------------------------------------------
-
-    // Select all text (equivalent to Ctrl+A).
     TextNode& select_all();
-
-    // Clear the selection without moving the caret.
     TextNode& deselect();
-
-    // Return a copy of the currently selected substring.
-    // Returns an empty wstring when there is no active selection.
     std::wstring selected_text() const;
 };
 
 // ---------------------------------------------------------------------------
 // GraphNode
 // ---------------------------------------------------------------------------
-//
-// A node that renders a two-axis line chart.  Multiple data series can be
-// layered; axis ranges are auto-derived from data or set explicitly.
-//
-// Visual style targets a "demos" dark-mode aesthetic:
-//   - Faint horizontal grid lines at rounded Y-tick positions.
-//   - Fainter vertical grid lines at X-tick positions.
-//   - A slightly brighter zero-line when y == 0 is in range.
-//   - Muted, right-aligned Y-axis labels; centred X-axis labels.
-//   - Smooth anti-aliased polylines with round join/cap stroke style.
-//
-// Recommended attrs (set via node.attr().set(...)):
-//   background-color  Color   Chart background (e.g. Color(0.07, 0.07, 0.10))
-//   grid-color        Color   Override default grid line colour
-//   grid-weight       float   Override default grid line weight (default 0.5)
-//   label-color       Color   Override default axis label colour
-//   label-font-size   float   Override default axis label size in pt (default 10.5)
-//   border-color      Color   Optional border around the whole node
-//   corner-radius     float   Optional rounded corners
-//
+
 class GraphNode : public Node {
 public:
     GraphNode();
 
-    // -- Data ------------------------------------------------------------
-
-    // Append a new data series.  xs and ys must have equal length; excess
-    // elements from the longer vector are silently ignored.
-    // color defaults to electric blue; weight is the polyline stroke width.
     GraphNode& push_series(
         std::wstring_view  name,
         std::vector<float> xs,
@@ -391,15 +425,8 @@ public:
         Color              color = Color(0.30f, 0.70f, 1.00f, 1.f),
         float              weight = 2.f);
 
-    // Remove all previously added series.
     GraphNode& clear_series();
-
-    // -- Axis ranges -----------------------------------------------------
-
-    // Pin the X axis to [lo, hi] rather than auto-fitting to data.
     GraphNode& x_range(float lo, float hi);
-
-    // Pin the Y axis to [lo, hi] rather than auto-fitting to data.
     GraphNode& y_range(float lo, float hi);
 };
 
@@ -415,7 +442,6 @@ public:
     unsigned int width()  const;
     unsigned int height() const;
 
-    /** @brief Enter the Win32 message loop. Blocks until the window is closed. */
     int run();
 };
 
@@ -443,7 +469,5 @@ WeakImpl<T> find(const char* name) {
     if (auto base = find(name)) return WeakImpl<T>(base.handle());
     return WeakImpl<T>(nullptr);
 }
-
-void animate(float* property, float begin, float end, float duration);
 
 } // namespace lintel

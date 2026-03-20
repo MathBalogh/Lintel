@@ -5,41 +5,72 @@
 namespace lintel {
 
 // ===========================================================================
-// inode_invoke_handlers
+// Layout accessors — read from attr with typed defaults
 // ===========================================================================
 //
-// Single connection point between the fire_*_context helpers (core.h) and the
-// EventRegistry.  core.h forward-declares this; we define it here because this
-// translation unit is the only one that needs both core.h and inode.h together.
+// Enum-valued props (Direction, Align, Justify) are stored as float (integer
+// cast) in the attribute map — the same convention used by TextAlign — because
+// AttribValue has no enum slot.  The accessors cast back on read.
 //
-void inode_invoke_handlers(INode* impl, Node& handle, Event type) {
-    CORE.registry.fire(impl, handle, type);
+
+float INode::layout_width()  const {
+    return attr.get_or<float>(Prop::Width, nan_f());
+}
+float INode::layout_height() const {
+    return attr.get_or<float>(Prop::Height, nan_f());
+}
+float INode::layout_gap()   const {
+    return attr.get_or<float>(Prop::Gap, 0.f);
+}
+float INode::layout_share() const {
+    return attr.get_or<float>(Prop::Share, 1.f);
 }
 
-// ===========================================================================
-// INode — handler registration
-// ===========================================================================
-
-void INode::add_handler(Event type, Node::EventHandler fn) {
-    CORE.registry.add(this, type, std::move(fn));
+Edges INode::layout_padding() const {
+    return Edges(
+        attr.get_or<float>(Prop::PaddingTop, 0.f),
+        attr.get_or<float>(Prop::PaddingRight, 0.f),
+        attr.get_or<float>(Prop::PaddingBottom, 0.f),
+        attr.get_or<float>(Prop::PaddingLeft, 0.f));
 }
 
-void INode::remove_handlers(Event type) {
-    CORE.registry.remove(this, type);
+Edges INode::layout_margin() const {
+    return Edges(
+        attr.get_or<float>(Prop::MarginTop, 0.f),
+        attr.get_or<float>(Prop::MarginRight, 0.f),
+        attr.get_or<float>(Prop::MarginBottom, 0.f),
+        attr.get_or<float>(Prop::MarginLeft, 0.f));
 }
 
-void INode::fire(Node& self, Event type) {
-    CORE.registry.fire(this, self, type);
+Direction INode::layout_direction() const {
+    const float raw = attr.get_or<float>(
+        Prop::Direction,
+        static_cast<float>(static_cast<int>(Direction::Column)));
+    return static_cast<Direction>(static_cast<int>(raw));
+}
+
+Align INode::layout_align() const {
+    const float raw = attr.get_or<float>(
+        Prop::AlignItems,
+        static_cast<float>(static_cast<int>(Align::Stretch)));
+    return static_cast<Align>(static_cast<int>(raw));
+}
+
+Justify INode::layout_justify() const {
+    const float raw = attr.get_or<float>(
+        Prop::JustifyItems,
+        static_cast<float>(static_cast<int>(Justify::Start)));
+    return static_cast<Justify>(static_cast<int>(raw));
 }
 
 // ===========================================================================
 // INode — geometry helpers
 // ===========================================================================
 
-float INode::inner_w()   const { return std::max(0.f, rect.w - lp.padding.horizontal()); }
-float INode::inner_h()   const { return std::max(0.f, rect.h - lp.padding.vertical()); }
-float INode::content_x() const { return rect.x + lp.padding.left; }
-float INode::content_y() const { return rect.y + lp.padding.top; }
+float INode::inner_w()   const { return std::max(0.f, rect.w - layout_padding().horizontal()); }
+float INode::inner_h()   const { return std::max(0.f, rect.h - layout_padding().vertical()); }
+float INode::content_x() const { return rect.x + layout_padding().left; }
+float INode::content_y() const { return rect.y + layout_padding().top; }
 
 // ===========================================================================
 // INode — tree utilities
@@ -50,8 +81,6 @@ Node* INode::find_hit(Node& self, float sx, float sy) {
         sy < rect.y || sy > rect.y + rect.h)
         return nullptr;
 
-    // Reverse iteration so the last-pushed (visually topmost) sibling wins
-    // when bounding rects overlap.
     for (auto it = children.rbegin(); it != children.rend(); ++it) {
         if (Node* hit = (*it).handle<INode>()->find_hit(*it, sx, sy))
             return hit;
@@ -59,7 +88,7 @@ Node* INode::find_hit(Node& self, float sx, float sy) {
     return &self;
 }
 
-void INode::update_hover(Node& self, float sx, float sy) {
+void INode::update_hover(WeakNode self, float sx, float sy) {
     const bool now_inside = (sx >= rect.x && sx <= rect.x + rect.w &&
                              sy >= rect.y && sy <= rect.y + rect.h);
     const Modifiers mods = CORE.input.modifiers;
@@ -77,30 +106,20 @@ void INode::update_hover(Node& self, float sx, float sy) {
                           MouseButton::None, mods);
     }
 
-    // Always recurse: a child may need a Leave even when the parent is still hit.
     for (Node& child : children)
-        child.handle<INode>()->update_hover(child, sx, sy);
+        child.handle<INode>()->update_hover(WeakNode(child), sx, sy);
 }
 
 void INode::bubble_up(INode* from_impl, Event type) {
-    // Walk up the parent chain.  At each level re-localise mouse_x / mouse_y
-    // relative to that ancestor's content area, then fire the event.
-    // Deliberately copies the weak pointer so the advance step is safe.
     WeakNode cursor = from_impl->parent;
     while (cursor) {
         INode* ancestor = cursor.handle<INode>();
         if (!ancestor) break;
 
-        // Re-localise before firing so the handler sees coordinates relative
-        // to this ancestor.
         CORE.input.mouse_x = CORE.input.mouse_screen_x - ancestor->content_x();
         CORE.input.mouse_y = CORE.input.mouse_screen_y - ancestor->content_y();
 
-        // cursor.as<Node>() reinterprets the WeakImpl as a Node handle in
-        // place (both types share an identical single-pointer layout).
-        CORE.registry.fire(ancestor, cursor.as<Node>(), type);
-
-        // Advance before the next iteration.
+        ancestor->invoke_handlers(cursor, type);
         cursor = ancestor->parent;
     }
 }
@@ -111,28 +130,22 @@ void INode::bubble_up(INode* from_impl, Event type) {
 
 void INode::set_focus(WeakNode target) {
     FocusState& fs = CORE.focus;
-
-    // Nothing to do when focus is already on target.
     if (fs.focused == target) return;
 
-    // Blur the outgoing node.
     if (fs.focused) {
         INode* prev = fs.focused.handle<INode>();
-        if (prev) {
-            fire_with_context(prev, fs.focused.as<Node>(), Event::Blur,
+        if (prev)
+            fire_with_context(prev, fs.focused, Event::Blur,
                               0.f, 0.f, MouseButton::None, {});
-        }
     }
 
     fs.focused = target;
 
-    // Focus the incoming node.
     if (fs.focused) {
         INode* next = fs.focused.handle<INode>();
-        if (next) {
-            fire_with_context(next, fs.focused.as<Node>(), Event::Focus,
+        if (next)
+            fire_with_context(next, fs.focused, Event::Focus,
                               0.f, 0.f, MouseButton::None, {});
-        }
     }
 }
 
@@ -167,66 +180,90 @@ void INode::focus_next(Node& tree_root) {
 // ===========================================================================
 // INode — layout
 // ===========================================================================
-//
-// Flex-style layout with two axes: a main axis (the layout direction) and a
-// cross axis (perpendicular).  Children with explicit sizes are "fixed"; the
-// remaining space on the main axis is distributed proportionally among
-// "share" children by their lp.share weights.
-//
 
 void INode::measure(float avail_w, float avail_h) {
-    // If an explicit size is set use it; otherwise claim the full available
-    // space (the parent will have already subtracted the child's margin).
-    rect.w = is_auto(lp.width) ? std::max(0.f, avail_w - lp.margin.horizontal()) : lp.width;
-    rect.h = is_auto(lp.height) ? std::max(0.f, avail_h - lp.margin.vertical()) : lp.height;
+    // ── Early exit: nothing changed since the last layout pass ────────────
+    //
+    // attr.layout_dirty is set whenever a box-model or layout-behavior prop
+    // is written through attr.set().  If it is clear and the parent is
+    // offering the same available space as before, the cached rect is correct
+    // and the entire subtree can be skipped.
+    //
+    if (!attr.layout_dirty &&
+        avail_w == cached_avail_w_ &&
+        avail_h == cached_avail_h_)
+        return;
 
-    if (children.empty()) return;
+    const Edges margin = layout_margin();
 
-    const bool  is_col = (lp.direction == Direction::Column);
+    rect.w = is_auto(layout_width())
+        ? std::max(0.f, avail_w - margin.horizontal())
+        : layout_width();
+    rect.h = is_auto(layout_height())
+        ? std::max(0.f, avail_h - margin.vertical())
+        : layout_height();
+
+    if (children.empty()) {
+        cached_avail_w_ = avail_w;
+        cached_avail_h_ = avail_h;
+        attr.layout_dirty = false;
+        return;
+    }
+
+    const bool  is_col = (layout_direction() == Direction::Column);
     const float cross_avail = is_col ? inner_w() : inner_h();
     const float main_avail = is_col ? inner_h() : inner_w();
 
-    // Give each child a preliminary size so the parent's own auto dimension
-    // can be resolved below.
+    // Give each child a preliminary size so the parent's auto dimension can
+    // be resolved in the shrink-wrap pass below.
     for (Node& child : children) {
         INode* ci = child.handle<INode>();
-        const bool fixed_main = is_col ? !is_auto(ci->lp.height) : !is_auto(ci->lp.width);
+        const bool fixed_main = is_col ? !is_auto(ci->layout_height())
+            : !is_auto(ci->layout_width());
         if (is_col)
             ci->measure(cross_avail, fixed_main ? main_avail : 0.f);
         else
             ci->measure(fixed_main ? main_avail : 0.f, cross_avail);
     }
 
-    // When our own main-axis size is auto, shrink-wrap to the sum of the
-    // fixed children (share children contribute 0 at this stage).
-    if (is_auto(is_col ? lp.height : lp.width)) {
+    // Shrink-wrap our own auto main-axis dimension to the sum of fixed children.
+    if (is_auto(is_col ? layout_height() : layout_width())) {
+        const Edges padding = layout_padding();
         const int   n = static_cast<int>(children.size());
-        float total_gap = n > 1 ? lp.gap * (n - 1) : 0.f;
-        float total_main = (is_col ? lp.padding.vertical() : lp.padding.horizontal())
+        const float gap_val = layout_gap();
+        float total_gap = n > 1 ? gap_val * (n - 1) : 0.f;
+        float total_main = (is_col ? padding.vertical() : padding.horizontal())
             + total_gap;
 
         for (Node& child : children) {
             INode* ci = child.handle<INode>();
-            const bool fixed_main = is_col ? !is_auto(ci->lp.height) : !is_auto(ci->lp.width);
+            const bool fixed_main = is_col ? !is_auto(ci->layout_height())
+                : !is_auto(ci->layout_width());
             if (fixed_main) {
+                const Edges cm = ci->layout_margin();
                 total_main += is_col
-                    ? ci->rect.h + ci->lp.margin.vertical()
-                    : ci->rect.w + ci->lp.margin.horizontal();
+                    ? ci->rect.h + cm.vertical()
+                    : ci->rect.w + cm.horizontal();
             }
         }
 
         if (is_col) rect.h = total_main;
         else        rect.w = total_main;
     }
+
+    cached_avail_w_ = avail_w;
+    cached_avail_h_ = avail_h;
+    attr.layout_dirty = false;
 }
 
 void INode::arrange(float slot_x, float slot_y) {
-    rect.x = slot_x + lp.margin.left;
-    rect.y = slot_y + lp.margin.top;
+    const Edges margin = layout_margin();
+    rect.x = slot_x + margin.left;
+    rect.y = slot_y + margin.top;
 
     if (!children.empty()) {
-        if (lp.direction == Direction::Column) arrange_column();
-        else                                   arrange_row();
+        if (layout_direction() == Direction::Column) arrange_column();
+        else                                          arrange_row();
     }
 }
 
@@ -243,17 +280,18 @@ void INode::arrange_column() {
     const float iw = inner_w();
     const float ih = inner_h();
     const int   n = static_cast<int>(children.size());
+    const float gap_val = layout_gap();
 
-    // -- Pass 1: separate fixed-height children from share children --------
-    float fixed_main = lp.gap * std::max(0, n - 1);
+    // -- Pass 1: fixed vs share children ----------------------------------
+    float fixed_main = gap_val * std::max(0, n - 1);
     float total_shares = 0.f;
 
     for (Node& child : children) {
         INode* ci = child.handle<INode>();
-        if (!is_auto(ci->lp.height) || ci->lp.share == 0.f)
-            fixed_main += ci->rect.h + ci->lp.margin.vertical();
+        if (!is_auto(ci->layout_height()) || ci->layout_share() == 0.f)
+            fixed_main += ci->rect.h + ci->layout_margin().vertical();
         else
-            total_shares += ci->lp.share;
+            total_shares += ci->layout_share();
     }
 
     const float share_pool = std::max(0.f, ih - fixed_main);
@@ -261,26 +299,24 @@ void INode::arrange_column() {
     // -- Pass 2: place children -------------------------------------------
 
     if (total_shares > 0.f) {
-        // Share children absorb all remaining space; justify is ignored.
         float cursor = content_y();
         for (Node& child : children) {
             INode* ci = child.handle<INode>();
-            if (is_auto(ci->lp.height) && ci->lp.share > 0.f) {
+            if (is_auto(ci->layout_height()) && ci->layout_share() > 0.f) {
                 ci->rect.h = std::max(0.f,
-                                      (ci->lp.share / total_shares) * share_pool
-                                      - ci->lp.margin.vertical());
+                                      (ci->layout_share() / total_shares) * share_pool
+                                      - ci->layout_margin().vertical());
             }
             ci->arrange(resolve_cross_x(ci, iw), cursor);
-            cursor += ci->rect.h + ci->lp.margin.vertical() + lp.gap;
+            cursor += ci->rect.h + ci->layout_margin().vertical() + gap_val;
         }
     }
     else {
-        // All children have fixed heights; apply justify_items.
         const float free_h = ih - fixed_main;
         float cursor = content_y();
         float extra_gap = 0.f;
 
-        switch (lp.justify_items) {
+        switch (layout_justify()) {
             case Justify::Center:
                 cursor += free_h * 0.5f;
                 break;
@@ -294,14 +330,14 @@ void INode::arrange_column() {
                 extra_gap = free_h / static_cast<float>(n);
                 cursor += extra_gap * 0.5f;
                 break;
-            default: // Start
+            default:
                 break;
         }
 
         for (Node& child : children) {
             INode* ci = child.handle<INode>();
             ci->arrange(resolve_cross_x(ci, iw), cursor);
-            cursor += ci->rect.h + ci->lp.margin.vertical() + lp.gap + extra_gap;
+            cursor += ci->rect.h + ci->layout_margin().vertical() + gap_val + extra_gap;
         }
     }
 }
@@ -314,17 +350,18 @@ void INode::arrange_row() {
     const float iw = inner_w();
     const float ih = inner_h();
     const int   n = static_cast<int>(children.size());
+    const float gap_val = layout_gap();
 
-    // -- Pass 1: fixed vs share children -----------------------------------
-    float fixed_main = lp.gap * std::max(0, n - 1);
+    // -- Pass 1: fixed vs share children ----------------------------------
+    float fixed_main = gap_val * std::max(0, n - 1);
     float total_shares = 0.f;
 
     for (Node& child : children) {
         INode* ci = child.handle<INode>();
-        if (!is_auto(ci->lp.width) || ci->lp.share == 0.f)
-            fixed_main += ci->rect.w + ci->lp.margin.horizontal();
+        if (!is_auto(ci->layout_width()) || ci->layout_share() == 0.f)
+            fixed_main += ci->rect.w + ci->layout_margin().horizontal();
         else
-            total_shares += ci->lp.share;
+            total_shares += ci->layout_share();
     }
 
     const float share_pool = std::max(0.f, iw - fixed_main);
@@ -335,13 +372,13 @@ void INode::arrange_row() {
         float cursor = content_x();
         for (Node& child : children) {
             INode* ci = child.handle<INode>();
-            if (is_auto(ci->lp.width) && ci->lp.share > 0.f) {
+            if (is_auto(ci->layout_width()) && ci->layout_share() > 0.f) {
                 ci->rect.w = std::max(0.f,
-                                      (ci->lp.share / total_shares) * share_pool
-                                      - ci->lp.margin.horizontal());
+                                      (ci->layout_share() / total_shares) * share_pool
+                                      - ci->layout_margin().horizontal());
             }
             ci->arrange(cursor, resolve_cross_y(ci, ih));
-            cursor += ci->rect.w + ci->lp.margin.horizontal() + lp.gap;
+            cursor += ci->rect.w + ci->layout_margin().horizontal() + gap_val;
         }
     }
     else {
@@ -349,7 +386,7 @@ void INode::arrange_row() {
         float cursor = content_x();
         float extra_gap = 0.f;
 
-        switch (lp.justify_items) {
+        switch (layout_justify()) {
             case Justify::Center:
                 cursor += free_w * 0.5f;
                 break;
@@ -363,14 +400,14 @@ void INode::arrange_row() {
                 extra_gap = free_w / static_cast<float>(n);
                 cursor += extra_gap * 0.5f;
                 break;
-            default: // Start
+            default:
                 break;
         }
 
         for (Node& child : children) {
             INode* ci = child.handle<INode>();
             ci->arrange(cursor, resolve_cross_y(ci, ih));
-            cursor += ci->rect.w + ci->lp.margin.horizontal() + lp.gap + extra_gap;
+            cursor += ci->rect.w + ci->layout_margin().horizontal() + gap_val + extra_gap;
         }
     }
 }
@@ -378,39 +415,36 @@ void INode::arrange_row() {
 // ---------------------------------------------------------------------------
 // Cross-axis position resolvers
 // ---------------------------------------------------------------------------
-//
-// Both helpers return the slot_x / slot_y to pass to the child's arrange().
-// For Stretch they also write the child's cross dimension directly into
-// ci->rect so the child sees the correct size without a second measure call.
-//
 
 float INode::resolve_cross_x(INode* ci, float iw) {
-    const float avail = iw - ci->lp.margin.horizontal();
-    switch (lp.align_items) {
+    const Edges margin = ci->layout_margin();
+    const float avail = iw - margin.horizontal();
+    switch (layout_align()) {
         case Align::Center:
-            return content_x() + ci->lp.margin.left + (avail - ci->rect.w) * 0.5f;
+            return content_x() + margin.left + (avail - ci->rect.w) * 0.5f;
         case Align::End:
-            return content_x() + iw - ci->lp.margin.right - ci->rect.w;
+            return content_x() + iw - margin.right - ci->rect.w;
         case Align::Stretch:
             ci->rect.w = std::max(0.f, avail);
-            return content_x() + ci->lp.margin.left;
+            return content_x() + margin.left;
         default: // Start
-            return content_x() + ci->lp.margin.left;
+            return content_x() + margin.left;
     }
 }
 
 float INode::resolve_cross_y(INode* ci, float ih) {
-    const float avail = ih - ci->lp.margin.vertical();
-    switch (lp.align_items) {
+    const Edges margin = ci->layout_margin();
+    const float avail = ih - margin.vertical();
+    switch (layout_align()) {
         case Align::Center:
-            return content_y() + ci->lp.margin.top + (avail - ci->rect.h) * 0.5f;
+            return content_y() + margin.top + (avail - ci->rect.h) * 0.5f;
         case Align::End:
-            return content_y() + ih - ci->lp.margin.bottom - ci->rect.h;
+            return content_y() + ih - margin.bottom - ci->rect.h;
         case Align::Stretch:
             ci->rect.h = std::max(0.f, avail);
-            return content_y() + ci->lp.margin.top;
+            return content_y() + margin.top;
         default: // Start
-            return content_y() + ci->lp.margin.top;
+            return content_y() + margin.top;
     }
 }
 
@@ -425,16 +459,14 @@ void INode::draw(Node& self, Canvas& canvas) {
 }
 
 void INode::draw_default(Canvas& canvas) {
-    const float radius = attr.get_or<float>(attribs::corner_radius, 0.f);
+    const float radius = attr.get_or<float>(Prop::CornerRadius, 0.f);
 
-    // Background fill
-    if (const Color* bg = attr.get<Color>(attribs::background_color))
+    if (const Color* bg = attr.get<Color>(Prop::BackgroundColor))
         canvas.fill_rect(rect, *bg, radius);
 
-    // Border stroke — only drawn when both color and weight are set.
-    if (attr.has(attribs::border_color) && attr.has(attribs::border_weight)) {
-        const Color& bc = *attr.get<Color>(attribs::border_color);
-        const float  bw = attr.get_or<float>(attribs::border_weight, 1.f);
+    if (attr.has(Prop::BorderColor) && attr.has(Prop::BorderWeight)) {
+        const Color& bc = *attr.get<Color>(Prop::BorderColor);
+        const float  bw = attr.get_or<float>(Prop::BorderWeight, 1.f);
         canvas.stroke_rect(rect, bc, bw, radius);
     }
 }
@@ -444,15 +476,11 @@ void INode::draw_default(Canvas& canvas) {
 // ===========================================================================
 
 Node::Node() { impl_allocate(); }
-Node::Node(std::nullptr_t) {} // leaves iptr_ = nullptr
+Node::Node(std::nullptr_t) {}
 
 Node::~Node() {
-    if (iptr_) {
-        // Remove all references in global state before the INode is deleted.
-        CORE.registry.clear_node(iptr_);
+    if (iptr_)
         CORE.clear_node(iptr_);
-    }
-    // Impl::~Impl() calls impl_release() -> delete iptr_.
 }
 
 Node::Node(Node&& other) noexcept
@@ -460,10 +488,7 @@ Node::Node(Node&& other) noexcept
 
 Node& Node::operator=(Node&& other) noexcept {
     if (this != &other) {
-        if (iptr_) {
-            CORE.registry.clear_node(iptr_);
-            CORE.clear_node(iptr_);
-        }
+        if (iptr_) CORE.clear_node(iptr_);
         Impl<INode>::operator=(std::move(other));
     }
     return *this;
@@ -475,17 +500,16 @@ Node& Node::operator=(Node&& other) noexcept {
 
 Node& Node::push() {
     Node& child = iptr_->children.emplace_back();
-    child.handle<INode>()->parent = *this; // WeakNode = Impl<INode>& (copies iptr_)
+    child.handle<INode>()->parent = *this;
     return child;
 }
 
 Node& Node::push(Node&& incoming) {
     if (!incoming) return *this;
 
-    // Detach from the old parent if needed.
     if (incoming.handle<INode>()->parent) {
         WeakNode old_parent = incoming.handle<INode>()->parent;
-        old_parent.as<Node>().remove(incoming);
+        old_parent->remove(incoming);
     }
 
     iptr_->children.push_back(std::move(incoming));
@@ -506,7 +530,7 @@ Node Node::remove(Node& child) {
             return owner;
         }
     }
-    return Node(nullptr); // child not found in this node
+    return Node(nullptr);
 }
 
 Node* Node::child(size_t index) {
@@ -518,20 +542,61 @@ Node* Node::child(size_t index) {
 // ===========================================================================
 // Node — style / layout setters (fluent)
 // ===========================================================================
+//
+// Every setter writes to attr using the canonical Prop key.  This is the
+// single path shared by the programmatic API, the parser, and event-delta
+// handlers.  layout_dirty is set automatically by Attributes::set() for the
+// box-model and layout-behavior properties.
+//
 
 Attributes& Node::attr() { return iptr_->attr; }
 Node& Node::attr(const Attributes& s) { iptr_->attr = s; return *this; }
 
-Node& Node::share(float s) { iptr_->lp.share = s; return *this; }
-Node& Node::width(float w) { iptr_->lp.width = w; return *this; }
-Node& Node::height(float h) { iptr_->lp.height = h; return *this; }
-Node& Node::padding(Edges e) { iptr_->lp.padding = e; return *this; }
-Node& Node::margin(Edges e) { iptr_->lp.margin = e; return *this; }
-Node& Node::row() { iptr_->lp.direction = Direction::Row;    return *this; }
-Node& Node::column() { iptr_->lp.direction = Direction::Column; return *this; }
-Node& Node::align(Align a) { iptr_->lp.align_items = a; return *this; }
-Node& Node::justify(Justify j) { iptr_->lp.justify_items = j; return *this; }
-Node& Node::gap(float g) { iptr_->lp.gap = g; return *this; }
+Node& Node::share(float s) { iptr_->attr.set(Prop::Share, s); return *this; }
+Node& Node::width(float w) { iptr_->attr.set(Prop::Width, w); return *this; }
+Node& Node::height(float h) { iptr_->attr.set(Prop::Height, h); return *this; }
+
+Node& Node::padding(Edges e) {
+    iptr_->attr.set(Prop::PaddingTop, e.top);
+    iptr_->attr.set(Prop::PaddingRight, e.right);
+    iptr_->attr.set(Prop::PaddingBottom, e.bottom);
+    iptr_->attr.set(Prop::PaddingLeft, e.left);
+    return *this;
+}
+
+Node& Node::margin(Edges e) {
+    iptr_->attr.set(Prop::MarginTop, e.top);
+    iptr_->attr.set(Prop::MarginRight, e.right);
+    iptr_->attr.set(Prop::MarginBottom, e.bottom);
+    iptr_->attr.set(Prop::MarginLeft, e.left);
+    return *this;
+}
+
+Node& Node::row() {
+    iptr_->attr.set(Prop::Direction,
+                    static_cast<float>(static_cast<int>(Direction::Row)));
+    return *this;
+}
+
+Node& Node::column() {
+    iptr_->attr.set(Prop::Direction,
+                    static_cast<float>(static_cast<int>(Direction::Column)));
+    return *this;
+}
+
+Node& Node::align(Align a) {
+    iptr_->attr.set(Prop::AlignItems,
+                    static_cast<float>(static_cast<int>(a)));
+    return *this;
+}
+
+Node& Node::justify(Justify j) {
+    iptr_->attr.set(Prop::JustifyItems,
+                    static_cast<float>(static_cast<int>(j)));
+    return *this;
+}
+
+Node& Node::gap(float g) { iptr_->attr.set(Prop::Gap, g); return *this; }
 Node& Node::focusable(bool f) { iptr_->focusable_flag = f; return *this; }
 Node& Node::draggable(bool d) { iptr_->draggable_flag = d; return *this; }
 
@@ -552,10 +617,12 @@ void Node::clear_on_of(Event type) {
 // Node — query
 // ===========================================================================
 
-float* Node::margin_bottom() { return &iptr_->lp.margin.bottom; }
-Rect Node::rect() const { return iptr_->rect; }
+float* Node::margin_bottom() {
+    return iptr_->attr.float_ref(Prop::MarginBottom);
+}
 
-float Node::mouse_x()        const { return CORE.input.mouse_screen_x - iptr_->content_x(); }
-float Node::mouse_y()        const { return CORE.input.mouse_screen_y - iptr_->content_y(); }
+Rect  Node::rect()    const { return iptr_->rect; }
+float Node::mouse_x() const { return CORE.input.mouse_screen_x - iptr_->content_x(); }
+float Node::mouse_y() const { return CORE.input.mouse_screen_y - iptr_->content_y(); }
 
 } // namespace lintel

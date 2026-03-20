@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core.h"
+#include "core.h"   // also pulls in canvas.h via the include chain
 
 #include <algorithm>
 #include <array>
@@ -16,18 +16,6 @@ namespace lintel {
 
 inline bool  is_auto(float v) { return std::isnan(v); }
 inline float nan_f() { return std::numeric_limits<float>::quiet_NaN(); }
-
-inline D2D1_RECT_F to_d2df(const Rect& r) {
-    return D2D1::RectF(r.x, r.y, r.x + r.w, r.y + r.h);
-}
-inline D2D1_ROUNDED_RECT to_d2d_rr(const Rect& r, float radius) {
-    return D2D1::RoundedRect(to_d2df(r), radius, radius);
-}
-inline ComPtr<ID2D1SolidColorBrush> make_brush(Color c) {
-    ComPtr<ID2D1SolidColorBrush> b;
-    GPU.d2d_context->CreateSolidColorBrush(D2D1::ColorF(c.r, c.g, c.b, c.a), &b);
-    return b;
-}
 
 // ---------------------------------------------------------------------------
 // LayoutProps
@@ -58,6 +46,12 @@ struct LayoutProps {
 // routing, drag/focus management) is driven from Core::process_message and
 // calls the methods below.
 //
+// Drawing contract
+// ----------------
+// Every draw() override receives a Canvas& that owns the full D2D / DWrite
+// API surface for the current frame.  Nodes must not call GPU.d2d_context or
+// GPU.dwrite_factory from inside draw(); all rendering goes through Canvas.
+//
 class INode {
 public:
     virtual ~INode() = default;
@@ -84,9 +78,22 @@ public:
     void layout(float slot_x, float slot_y, float avail_w, float avail_h);
 
     // -- Draw pipeline ---------------------------------------------------
+    //
+    // canvas is the frame-scoped drawing surface owned by Core.  It is passed
+    // down the tree so every node draws through the same abstraction.
+    //
 
-    void draw_default(); // Renders background and border using attr values.
-    virtual void draw(Node& self);
+    /**
+     * @brief Draw background fill and border using the node's attr values.
+     * Called at the top of draw() overrides before child content.
+     */
+    void draw_default(Canvas& canvas);
+
+    /**
+     * @brief Full draw pass: draw_default then recurse into children.
+     * Overrides must call draw_default(canvas) and forward canvas to children.
+     */
+    virtual void draw(Node& self, Canvas& canvas);
 
     // -- Geometry helpers ------------------------------------------------
 

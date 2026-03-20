@@ -66,7 +66,10 @@ static MouseButton btn_from_msg(UINT msg) noexcept {
 // Core singleton
 // ---------------------------------------------------------------------------
 
-Core::Core() {
+// canvas(gpu) binds the Canvas reference before gpu.initialize() runs.
+// Canvas stores only the reference during its own construction, so no GPU
+// API is called until the first draw pass.
+Core::Core(): canvas(gpu) {
     gpu.initialize();
 }
 Core::~Core() {
@@ -114,7 +117,7 @@ void Core::start() {
         while (running_) {
             // Compute delta-time
             time_point now_t = steady_clock::now();
-            ui_tick_dts = ui_tick_dts = std::chrono::duration<float>(now_t - last_t).count();
+            ui_tick_dts = std::chrono::duration<float>(now_t - last_t).count();
             last_t = now_t;
 
             // Drain all pending messages first so the render reflects the
@@ -241,9 +244,9 @@ void Core::process_message(UINT msg, WPARAM wp, LPARAM lp) {
                 root_impl->update_hover(root, -1.f, -1.f);
             break;
 
-        // -----------------------------------------------------------------------
-        // Button down — press, optional focus transfer
-        // -----------------------------------------------------------------------
+            // -----------------------------------------------------------------------
+            // Button down — press, optional focus transfer
+            // -----------------------------------------------------------------------
 
         case WM_LBUTTONDOWN:
         case WM_RBUTTONDOWN:
@@ -507,11 +510,17 @@ void Core::process_default() {
                   static_cast<float>(win->height));
 
     // -- Draw ------------------------------------------------------------
+    //
+    // canvas is a member of Core and is valid for the entire lifetime of the
+    // application.  Passing it by reference into draw() means every node in
+    // the tree receives the same Canvas for the frame, keeping all D2D calls
+    // behind a single abstraction boundary.
+    //
     d2d->BeginDraw();
     d2d->Clear(D2D1::ColorF(0.09f, 0.09f, 0.09f, 1.f));
 
     if (INode* r = root.handle<INode>())
-        r->draw(root);
+        r->draw(root, canvas);
 
     // Ignore D2DERR_RECREATE_TARGET for now; a full device-lost recovery path
     // would call win->rebuild_targets() and retry here.

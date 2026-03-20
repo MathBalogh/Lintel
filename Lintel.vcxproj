@@ -127,8 +127,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="canvas.cpp" />
     <ClCompile Include="core.cpp" />
     <ClCompile Include="gpu.cpp" />
+    <ClCompile Include="igraphnode.cpp" />
     <ClCompile Include="inode.cpp" />
     <ClCompile Include="itextnode.cpp" />
     <ClCompile Include="iwindow.cpp" />
@@ -137,9 +139,11 @@
     <ClCompile Include="parser.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="canvas.h" />
     <ClInclude Include="core.h" />
     <ClInclude Include="gpu.h" />
     <ClInclude Include="handle.h" />
+    <ClInclude Include="igraphnode.h" />
     <ClInclude Include="inode.h" />
     <ClInclude Include="itextnode.h" />
     <ClInclude Include="iwindow.h" />

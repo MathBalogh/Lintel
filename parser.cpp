@@ -80,8 +80,9 @@ void register_value_function(const std::string& fname, detail::ValueFuncParser f
 // Built-in registrations
 // ----------------------------------------------------------------
 static bool s_registered = ([] {
-    register_node("node", [] (Node&, const ASTNode&) { return Node();     });
-    register_node("text", [] (Node&, const ASTNode&) { return TextNode(); });
+    register_node("node", [] (Node&, const ASTNode&) { return Node();      });
+    register_node("text", [] (Node&, const ASTNode&) { return TextNode();  });
+    register_node("graph", [] (Node&, const ASTNode&) { return GraphNode(); });
 
     // Extensible colour function; users can register "hsl", "rgba", etc. the same way.
     register_value_function("rgb", [] (std::string_view args) -> AttribValue {

@@ -77,8 +77,6 @@ void ITextNode::wire_events(Node& handle) {
     });
 
     // ── Mouse: click-to-position ──────────────────────────────────────────
-    // mouse_x/y on the handler's Node& are layout-relative (content origin),
-    // so they can be passed directly to HitTestPoint.
     handle.on(Event::MouseDown, [this] (Node& self) {
         lmb_selecting = true;
         on_click_position(self.mouse_x(), self.mouse_y(), modifiers().shift);
@@ -129,11 +127,26 @@ void ITextNode::wire_events(Node& handle) {
                 on_move_end(shift);
                 break;
 
-            case 0x41: // 'A'
+            case 0x41: // 'A'  — select all
                 if (ctrl) {
                     selection_anchor = 0;
                     caret_pos = content.size();
                 }
+                break;
+
+            case 0x43: // 'C'  — copy (works on read-only nodes too)
+                if (ctrl) copy_to_clipboard();
+                break;
+
+            case 0x58: // 'X'  — cut
+                if (ctrl && editable) {
+                    copy_to_clipboard();
+                    if (has_selection()) delete_selection();
+                }
+                break;
+
+            case 0x56: // 'V'  — paste
+                if (ctrl && editable) paste_from_clipboard();
                 break;
 
             default: break;
@@ -148,34 +161,27 @@ void ITextNode::wire_events(Node& handle) {
 // ---------------------------------------------------------------------------
 // DWrite format and layout management
 // ---------------------------------------------------------------------------
+//
+// Both methods go through CORE.canvas so no DWrite or D2D API is called
+// directly from this translation unit.
+//
 
 void ITextNode::ensure_format() {
-    if (fmt || !GPU.dwrite_factory) return;
+    if (fmt) return;
 
-    GPU.dwrite_factory->CreateTextFormat(
-        font_family.c_str(), nullptr,
-        bold ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_REGULAR,
-        italic_val ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL,
-        DWRITE_FONT_STRETCH_NORMAL,
-        font_size, L"", &fmt);
+    fmt = CORE.canvas.make_text_format(
+        font_family.c_str(), font_size, bold, italic_val, wrap);
 
-    if (fmt) {
-        fmt->SetWordWrapping(wrap ? DWRITE_WORD_WRAPPING_WRAP
-                             : DWRITE_WORD_WRAPPING_NO_WRAP);
+    if (fmt)
         fmt->SetTextAlignment(dwrite_alignment(text_align_val));
-    }
 }
 
 ComPtr<IDWriteTextLayout> ITextNode::make_layout(float max_w) const {
-    if (!GPU.dwrite_factory || !fmt || content.empty()) return {};
-
-    ComPtr<IDWriteTextLayout> layout;
-    GPU.dwrite_factory->CreateTextLayout(
-        content.c_str(), (UINT32) content.size(),
+    if (!fmt || content.empty()) return {};
+    return CORE.canvas.make_text_layout(
+        content.c_str(), static_cast<uint32_t>(content.size()),
         fmt.Get(), max_w,
-        1e6f, // height – never clamp vertically for hit-testing
-        &layout);
-    return layout;
+        1e6f); // height — never clamp vertically for hit-testing
 }
 
 // ---------------------------------------------------------------------------
@@ -219,11 +225,12 @@ void ITextNode::arrange(float slot_x, float slot_y) {
 // Selection highlight rendering
 // ---------------------------------------------------------------------------
 
-void ITextNode::draw_selection(const ComPtr<IDWriteTextLayout>& layout) const {
+void ITextNode::draw_selection(
+    const ComPtr<IDWriteTextLayout>& layout, Canvas& canvas) const {
     if (!has_selection() || !layout) return;
 
-    const UINT32 range_start = (UINT32) sel_start();
-    const UINT32 range_length = (UINT32) (sel_end() - sel_start());
+    const UINT32 range_start = static_cast<UINT32>(sel_start());
+    const UINT32 range_length = static_cast<UINT32>(sel_end() - sel_start());
 
     // First call: discover how many geometry rectangles the selection spans
     // (may be > 1 when text wraps across multiple lines).
@@ -236,24 +243,19 @@ void ITextNode::draw_selection(const ComPtr<IDWriteTextLayout>& layout) const {
     layout->HitTestTextRange(range_start, range_length,
                              0.f, 0.f, ranges.data(), count, &count);
 
-    ComPtr<ID2D1SolidColorBrush> sel_brush;
-    GPU.d2d_context->CreateSolidColorBrush(
-        D2D1::ColorF(0.20f, 0.44f, 0.85f, 0.40f), &sel_brush);
-    if (!sel_brush) return;
-
-    // HitTestTextRange returns coordinates relative to layout origin.
-    // The layout is rendered at (content_x(), content_y()), i.e. the
-    // top-left of the padded content area.
+    // HitTestTextRange returns coordinates relative to the layout origin,
+    // which is placed at (content_x(), content_y()).
     const float ox = content_x();
     const float oy = content_y();
 
+    const Color sel_color{ 0.20f, 0.44f, 0.85f, 0.40f };
     for (UINT32 i = 0; i < count; ++i) {
-        const D2D1_RECT_F sr = D2D1::RectF(
-            ox + ranges[i].left,
-            oy + ranges[i].top,
-            ox + ranges[i].left + ranges[i].width,
-            oy + ranges[i].top + ranges[i].height);
-        GPU.d2d_context->FillRectangle(sr, sel_brush.Get());
+        canvas.fill_rect(
+            Rect{ ox + ranges[i].left,
+                  oy + ranges[i].top,
+                  ranges[i].width,
+                  ranges[i].height },
+            sel_color);
     }
 }
 
@@ -261,33 +263,26 @@ void ITextNode::draw_selection(const ComPtr<IDWriteTextLayout>& layout) const {
 // Draw: background → selection → text → caret
 // ---------------------------------------------------------------------------
 
-void ITextNode::draw(Node& handle) {
+void ITextNode::draw(Node& handle, Canvas& canvas) {
     sync_style();
-    draw_default();
+    draw_default(canvas);
 
     ensure_format();
     if (!fmt) return;
 
     // Build one shared layout used for both selection highlight and caret.
     const float lw = inner_w();
-    ComPtr<IDWriteTextLayout> layout = content.empty() ? ComPtr<IDWriteTextLayout>{} : make_layout(lw);
+    ComPtr<IDWriteTextLayout> layout =
+        content.empty() ? ComPtr<IDWriteTextLayout>{} : make_layout(lw);
 
     // ── selection highlight (behind text) ─────────────────────────────────
-    draw_selection(layout);
+    draw_selection(layout, canvas);
 
     // ── text ──────────────────────────────────────────────────────────────
     if (!content.empty()) {
-        auto brush = make_brush(text_color);
-        if (brush) {
-            const D2D1_RECT_F text_rect = D2D1::RectF(
-                content_x(),
-                content_y(),
-                rect.x + rect.w - lp.padding.right,
-                rect.y + rect.h - lp.padding.bottom);
-            GPU.d2d_context->DrawText(
-                content.c_str(), (UINT32) content.size(),
-                fmt.Get(), text_rect, brush.Get());
-        }
+        // layout_box spans the padded content area in absolute pixel coordinates.
+        const Rect text_rect{ content_x(), content_y(), inner_w(), inner_h() };
+        canvas.draw_text(content, fmt.Get(), text_rect, text_color);
     }
 
     // ── caret ─────────────────────────────────────────────────────────────
@@ -296,7 +291,7 @@ void ITextNode::draw(Node& handle) {
     float caret_px = 0.f, caret_py = 0.f;
     DWRITE_HIT_TEST_METRICS hit{};
     layout->HitTestTextPosition(
-        (UINT32) caret_pos,
+        static_cast<UINT32>(caret_pos),
         /*isTrailingHit=*/FALSE,
         &caret_px, &caret_py, &hit);
 
@@ -304,16 +299,7 @@ void ITextNode::draw(Node& handle) {
     const float cy = content_y() + caret_py;
     const float ch = (hit.height > 0.f) ? hit.height : font_size;
 
-    ComPtr<ID2D1SolidColorBrush> caret_brush;
-    GPU.d2d_context->CreateSolidColorBrush(
-        D2D1::ColorF(text_color.r, text_color.g, text_color.b, text_color.a),
-        &caret_brush);
-    if (caret_brush) {
-        GPU.d2d_context->DrawLine(
-            D2D1::Point2F(cx, cy),
-            D2D1::Point2F(cx, cy + ch),
-            caret_brush.Get(), 1.0f);
-    }
+    canvas.draw_line(cx, cy, cx, cy + ch, text_color, 1.0f);
 }
 
 // ---------------------------------------------------------------------------
@@ -422,11 +408,17 @@ void ITextNode::on_move_end(bool extend) {
 // ---------------------------------------------------------------------------
 
 void ITextNode::on_input(wchar_t ch) {
-    // Replace any selection first so typing over a highlight works naturally.
-    if (has_selection()) delete_selection();
-    if (std::iswprint(ch) || ch == (wchar_t) 13) {
+    // Only printable characters (and CR) actually insert content.
+    // The selection must not be erased for control characters such as the
+    // WM_CHAR payloads produced by Ctrl+A (0x01), Ctrl+C (0x03), etc. —
+    // those are handled in the KeyDown handler and must not reach here as
+    // editing operations.
+    if (std::iswprint(ch) || ch == static_cast<wchar_t>(13)) {
+        // Replace any active selection so that typing over highlighted text
+        // works naturally — but only now that we know we will insert something.
+        if (has_selection()) delete_selection();
         content.insert(
-            content.begin() + (std::wstring::difference_type) caret_pos, ch);
+            content.begin() + static_cast<std::wstring::difference_type>(caret_pos), ch);
         set_caret(caret_pos + 1, /*extend=*/false);
         invalidate_format();
     }
@@ -436,7 +428,7 @@ void ITextNode::on_backspace() {
     if (has_selection()) { delete_selection(); return; }
     if (caret_pos == 0)  return;
     content.erase(
-        content.begin() + (std::wstring::difference_type) (caret_pos - 1));
+        content.begin() + static_cast<std::wstring::difference_type>(caret_pos - 1));
     set_caret(caret_pos - 1, false);
     invalidate_format();
 }
@@ -445,8 +437,73 @@ void ITextNode::on_delete() {
     if (has_selection()) { delete_selection(); return; }
     if (caret_pos >= content.size()) return;
     content.erase(
-        content.begin() + (std::wstring::difference_type) caret_pos);
+        content.begin() + static_cast<std::wstring::difference_type>(caret_pos));
     invalidate_format(); // caret_pos stays; anchor stays
+}
+
+// ---------------------------------------------------------------------------
+// Clipboard
+// ---------------------------------------------------------------------------
+
+void ITextNode::copy_to_clipboard() const {
+    if (!has_selection()) return;
+
+    const std::wstring text = content.substr(sel_start(), sel_end() - sel_start());
+
+    if (!OpenClipboard(nullptr)) return;
+
+    EmptyClipboard();
+
+    const size_t byte_count = (text.size() + 1) * sizeof(wchar_t);
+    HGLOBAL hmem = GlobalAlloc(GMEM_MOVEABLE, byte_count);
+    if (!hmem) {
+        CloseClipboard();
+        return;
+    }
+
+    if (wchar_t* dst = static_cast<wchar_t*>(GlobalLock(hmem))) {
+        std::memcpy(dst, text.c_str(), byte_count);
+        GlobalUnlock(hmem);
+        // SetClipboardData takes ownership of hmem on success;
+        // only free it ourselves if the call fails.
+        if (!SetClipboardData(CF_UNICODETEXT, hmem))
+            GlobalFree(hmem);
+    }
+    else {
+        GlobalFree(hmem);
+    }
+
+    CloseClipboard();
+}
+
+void ITextNode::paste_from_clipboard() {
+    if (!OpenClipboard(nullptr)) return;
+
+    HGLOBAL hmem = GetClipboardData(CF_UNICODETEXT);
+    if (!hmem) {
+        CloseClipboard();
+        return;
+    }
+
+    // Copy into a local wstring while the clipboard is still open and the
+    // memory is locked, then release both before touching node state.
+    std::wstring text;
+    if (const wchar_t* src = static_cast<const wchar_t*>(GlobalLock(hmem))) {
+        text = src;
+        GlobalUnlock(hmem);
+    }
+
+    CloseClipboard();
+
+    if (text.empty()) return;
+
+    // Replace any active selection before inserting.
+    if (has_selection()) delete_selection();
+
+    // Insert through on_input so non-printable code points are filtered and
+    // format invalidation is handled consistently with normal typing.
+    for (wchar_t ch : text)
+        on_input(ch);
 }
 
 // ---------------------------------------------------------------------------

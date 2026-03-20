@@ -418,40 +418,24 @@ float INode::resolve_cross_y(INode* ci, float ih) {
 // INode — draw
 // ===========================================================================
 
-void INode::draw(Node& self) {
-    draw_default();
+void INode::draw(Node& self, Canvas& canvas) {
+    draw_default(canvas);
     for (Node& child : children)
-        child.handle<INode>()->draw(child);
+        child.handle<INode>()->draw(child, canvas);
 }
 
-void INode::draw_default() {
-    ID2D1DeviceContext* dc = GPU.d2d_context.Get();
-    if (!dc) return;
-
+void INode::draw_default(Canvas& canvas) {
     const float radius = attr.get_or<float>(attribs::corner_radius, 0.f);
 
     // Background fill
-    if (const Color* bg = attr.get<Color>(attribs::background_color)) {
-        if (auto brush = make_brush(*bg)) {
-            if (radius > 0.f)
-                dc->FillRoundedRectangle(to_d2d_rr(rect, radius), brush.Get());
-            else
-                dc->FillRectangle(to_d2df(rect), brush.Get());
-        }
-    }
+    if (const Color* bg = attr.get<Color>(attribs::background_color))
+        canvas.fill_rect(rect, *bg, radius);
 
     // Border stroke — only drawn when both color and weight are set.
     if (attr.has(attribs::border_color) && attr.has(attribs::border_weight)) {
         const Color& bc = *attr.get<Color>(attribs::border_color);
         const float  bw = attr.get_or<float>(attribs::border_weight, 1.f);
-        if (bw > 0.f) {
-            if (auto brush = make_brush(bc)) {
-                if (radius > 0.f)
-                    dc->DrawRoundedRectangle(to_d2d_rr(rect, radius), brush.Get(), bw);
-                else
-                    dc->DrawRectangle(to_d2df(rect), brush.Get(), bw);
-            }
-        }
+        canvas.stroke_rect(rect, bc, bw, radius);
     }
 }
 
@@ -568,6 +552,7 @@ void Node::clear_on_of(Event type) {
 // Node — query
 // ===========================================================================
 
+float* Node::margin_bottom() { return &iptr_->lp.margin.bottom; }
 Rect Node::rect() const { return iptr_->rect; }
 
 float Node::mouse_x()        const { return CORE.input.mouse_screen_x - iptr_->content_x(); }

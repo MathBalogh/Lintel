@@ -14,8 +14,10 @@
 #include <thread>
 
 #include "gpu.h"
+#include "canvas.h"   // ← Canvas abstraction; included here so every node TU
+//   that includes core.h automatically sees the type.
 
-// Shortcuts to the singleton and its GPU context.
+// Shortcuts to the singleton and its GPU / Canvas contexts.
 #define CORE Core::get()
 #define GPU  (Core::get().gpu)
 
@@ -157,7 +159,7 @@ struct AnimationItem {
 };
 struct Animator {
     std::vector<AnimationItem> items;
-    std::vector<size_t> free_indices; // TODO: consider whether searching for a free item vs bookkeeping
+    std::vector<size_t> free_indices;
 
     void push(const AnimationItem& item);
     void step(float delta_time);
@@ -167,9 +169,11 @@ struct Animator {
 // Core
 // ---------------------------------------------------------------------------
 //
-// Singleton that owns the GPU context, event registry, and all global input /
-// focus / pointer state.  The worker thread lives here; it processes messages
-// from the queue, then calls process_default() to layout and draw.
+// Singleton that owns the GPU context, the Canvas drawing abstraction, the
+// event registry, and all global input / focus / pointer state.
+//
+// Member declaration order matters: gpu must precede canvas because Canvas
+// stores a GpuContext& that is bound at construction time.
 //
 class Core {
     std::thread               worker_;
@@ -191,6 +195,14 @@ public:
     Core& operator=(const Core&) = delete;
 
     GpuContext    gpu;
+
+    // Canvas must be declared after gpu so its GpuContext& reference is bound
+    // to an already-constructed object.  It is initialised in the Core
+    // constructor's member-initialiser list before gpu.initialize() is called;
+    // Canvas stores only the reference at that point so no GPU API is invoked
+    // during its own construction.
+    Canvas        canvas;
+
     InputState    input;
     FocusState    focus;
     PointerState  pointer;

@@ -31,6 +31,12 @@
     <Filter Include="lib\internal\text node">
       <UniqueIdentifier>{042f426d-8751-4da4-9b8e-1911dd0bfd18}</UniqueIdentifier>
     </Filter>
+    <Filter Include="lib\internal\graph">
+      <UniqueIdentifier>{b6cfe4b5-2a08-4e6d-b58c-faa95ea11e7c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lib\core\canvas">
+      <UniqueIdentifier>{d010ac7f-9aed-4b25-8304-6e484145d76c}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -57,6 +63,12 @@
     <ClCompile Include="itextnode.cpp">
       <Filter>lib\internal\text node</Filter>
     </ClCompile>
+    <ClCompile Include="igraphnode.cpp">
+      <Filter>lib\internal\graph</Filter>
+    </ClCompile>
+    <ClCompile Include="canvas.cpp">
+      <Filter>lib\core\canvas</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="core.h">
@@ -82,6 +94,12 @@
     </ClInclude>
     <ClInclude Include="lexer.h">
       <Filter>lib\parser</Filter>
+    </ClInclude>
+    <ClInclude Include="igraphnode.h">
+      <Filter>lib\internal\graph</Filter>
+    </ClInclude>
+    <ClInclude Include="canvas.h">
+      <Filter>lib\core\canvas</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -6,6 +6,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <variant>
+#include <vector>
 
 #include "handle.h"
 
@@ -300,7 +301,9 @@ public:
 
     // -- Query -----------------------------------------------------------
 
+    float* margin_bottom();
     Rect  rect()    const;
+
     // Relative to this node's content origin.
     float mouse_x() const;
     float mouse_y() const;
@@ -347,6 +350,57 @@ public:
     // Return a copy of the currently selected substring.
     // Returns an empty wstring when there is no active selection.
     std::wstring selected_text() const;
+};
+
+// ---------------------------------------------------------------------------
+// GraphNode
+// ---------------------------------------------------------------------------
+//
+// A node that renders a two-axis line chart.  Multiple data series can be
+// layered; axis ranges are auto-derived from data or set explicitly.
+//
+// Visual style targets a "demos" dark-mode aesthetic:
+//   - Faint horizontal grid lines at rounded Y-tick positions.
+//   - Fainter vertical grid lines at X-tick positions.
+//   - A slightly brighter zero-line when y == 0 is in range.
+//   - Muted, right-aligned Y-axis labels; centred X-axis labels.
+//   - Smooth anti-aliased polylines with round join/cap stroke style.
+//
+// Recommended attrs (set via node.attr().set(...)):
+//   background-color  Color   Chart background (e.g. Color(0.07, 0.07, 0.10))
+//   grid-color        Color   Override default grid line colour
+//   grid-weight       float   Override default grid line weight (default 0.5)
+//   label-color       Color   Override default axis label colour
+//   label-font-size   float   Override default axis label size in pt (default 10.5)
+//   border-color      Color   Optional border around the whole node
+//   corner-radius     float   Optional rounded corners
+//
+class GraphNode : public Node {
+public:
+    GraphNode();
+
+    // -- Data ------------------------------------------------------------
+
+    // Append a new data series.  xs and ys must have equal length; excess
+    // elements from the longer vector are silently ignored.
+    // color defaults to electric blue; weight is the polyline stroke width.
+    GraphNode& push_series(
+        std::wstring_view  name,
+        std::vector<float> xs,
+        std::vector<float> ys,
+        Color              color = Color(0.30f, 0.70f, 1.00f, 1.f),
+        float              weight = 2.f);
+
+    // Remove all previously added series.
+    GraphNode& clear_series();
+
+    // -- Axis ranges -----------------------------------------------------
+
+    // Pin the X axis to [lo, hi] rather than auto-fitting to data.
+    GraphNode& x_range(float lo, float hi);
+
+    // Pin the Y axis to [lo, hi] rather than auto-fitting to data.
+    GraphNode& y_range(float lo, float hi);
 };
 
 // ---------------------------------------------------------------------------

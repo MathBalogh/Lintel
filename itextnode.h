@@ -11,6 +11,15 @@ namespace lintel {
  * fields below act as resolved defaults; sync_style() is called at the start
  * of measure() and draw() to pick up any changes made through Node::attr().
  *
+ * Drawing contract
+ * ----------------
+ * draw() and its helpers (draw_selection, caret rendering) must go through
+ * the Canvas& parameter.  They must not call GPU.d2d_context directly.
+ *
+ * The DWrite text format and layout objects are created via CORE.canvas
+ * factory methods (ensure_format / make_layout) so the same abstraction is
+ * used throughout, even in the non-draw paths (measure, hit testing).
+ *
  * ── Input wiring (registered in wire_events(), called from constructors) ──
  *
  *   Event::Focus     – sets has_focus, resets caret blink timer.
@@ -76,9 +85,18 @@ public:
     void delete_selection();
 
     /* ── DirectWrite helpers ──────────────────────────────────────────────── */
-    ComPtr<IDWriteTextFormat> fmt;   // Rebuilt lazily when properties change.
+
+    // IDWriteTextFormat is built lazily via CORE.canvas.make_text_format()
+    // and cached here between frames.  It is invalidated whenever a
+    // text-affecting property changes.
+    ComPtr<IDWriteTextFormat> fmt;
 
     void invalidate_format() { fmt.Reset(); }
+
+    /**
+     * @brief Ensure fmt is initialised, creating it via CORE.canvas if needed.
+     * Called at the top of measure() and draw().
+     */
     void ensure_format();
 
     /**
@@ -93,7 +111,7 @@ public:
     void arrange(float slot_x, float slot_y)   override;
 
     /* ── rendering ────────────────────────────────────────────────────────── */
-    void draw(Node& handle) override;
+    void draw(Node& handle, Canvas& canvas) override;
 
     /* ── event wiring ─────────────────────────────────────────────────────── */
 
@@ -103,6 +121,23 @@ public:
      * The TextNode constructors call this automatically.
      */
     void wire_events(Node& handle);
+
+    /* ── clipboard ────────────────────────────────────────────────────────── */
+
+    /**
+     * @brief Copy the current selection to the system clipboard (CF_UNICODETEXT).
+     * No-op when has_selection() is false.
+     */
+    void copy_to_clipboard() const;
+
+    /**
+     * @brief Paste CF_UNICODETEXT from the system clipboard at the caret.
+     * Replaces any active selection first.  Each character is filtered through
+     * on_input() so that non-printable code points are silently discarded and
+     * the format is properly invalidated.
+     * No-op when the clipboard contains no compatible text.
+     */
+    void paste_from_clipboard();
 
     /* ── editing callbacks (called from the wired handlers) ──────────────── */
 
@@ -158,30 +193,22 @@ public:
 private:
     /* ── word-boundary helpers ────────────────────────────────────────────── */
 
-    /**
-     * @brief Return the code-unit index of the word start at or before @p pos.
-     * Skips trailing whitespace then non-whitespace in the left direction.
-     */
     size_t word_start(size_t pos) const;
-
-    /**
-     * @brief Return the code-unit index of the word end at or after @p pos.
-     * Skips non-whitespace then whitespace in the right direction.
-     */
     size_t word_end(size_t pos) const;
 
     /**
      * @brief Build a DWriteTextLayout for the current content at @p max_w.
-     * Layout alignment is applied from text_align_val so hit-test results are
-     * consistent with what is visually rendered.
+     * Uses CORE.canvas.make_text_layout() so layout creation is routed through
+     * the same abstraction as all other GPU factory calls.
      */
     ComPtr<IDWriteTextLayout> make_layout(float max_w) const;
 
     /**
      * @brief Render selection highlight rectangles behind the text.
      * Called from draw() before DrawText.  No-op when has_selection() is false.
+     * All rendering goes through canvas.
      */
-    void draw_selection(const ComPtr<IDWriteTextLayout>& layout) const;
+    void draw_selection(const ComPtr<IDWriteTextLayout>& layout, Canvas& canvas) const;
 };
 
 } // namespace lintel

@@ -4,8 +4,6 @@ using namespace lintel;
 
 int main() {
 	Window window;
-
-	root().push(ImageNode("image.jpg"));
-
+	root() = load("main.ltl");
 	return window.run();
 }

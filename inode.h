@@ -18,6 +18,27 @@ inline bool  is_auto(float v) { return std::isnan(v); }
 inline float nan_f() { return std::numeric_limits<float>::quiet_NaN(); }
 
 // ---------------------------------------------------------------------------
+// Tween — one in-flight interpolation
+// ---------------------------------------------------------------------------
+//
+// Created by INode::animate_prop when an event delta fires on a prop that has
+// a TransitionSpec.  Destroyed automatically when elapsed >= duration.
+//
+// range holds either {from,to} floats or {from,to} Colors so both value
+// types are handled without virtual dispatch.
+//
+struct Tween {
+    Prop prop;
+    std::variant<
+        std::pair<float, float>,
+        std::pair<Color, Color>
+    > range;
+    float  elapsed = 0.f;
+    float  duration = 0.15f;
+    Easing easing = Easing::EaseOut;
+};
+
+// ---------------------------------------------------------------------------
 // INode — internal node implementation
 // ---------------------------------------------------------------------------
 //
@@ -71,11 +92,45 @@ public:
     // -- Layout cache (used by measure's early-exit guard) ----------------
     //
     // Stores the avail_w / avail_h values passed to the previous successful
-    // measure call.  If attr.layout_dirty is false and the available space
-    // matches, measure() returns immediately and reuses the cached rect.
+    // measure call.  If attr.layout_dirty is false, no active tweens are
+    // running, and the available space matches, measure() returns immediately.
     //
     float cached_avail_w_ = -1.f;
     float cached_avail_h_ = -1.f;
+
+    // -- Animation ---------------------------------------------------------
+    //
+    // transitions_: keyed by Prop uint32_t; set once at tree-build time via
+    //   the "transition = <prop> <duration> <easing>" document directive.
+    //
+    // tweens_: live in-flight interpolations.  Created by animate_prop();
+    //   advanced by tick_tweens() each frame; erased when complete.
+    //
+    // has_active_tweens_: true while tweens_ is non-empty; lets measure()'s
+    //   early-exit guard skip the dirty-flag fast path when animating.
+    //
+    std::unordered_map<uint32_t, TransitionSpec> transitions_;
+    std::vector<Tween>                           tweens_;
+    bool                                         has_active_tweens_ = false;
+
+    /**
+     * @brief Set or animate prop toward target.
+     *
+     * If transitions_ contains a spec for prop, a Tween is created (or the
+     * existing one is restarted from the current live value) and the prop will
+     * be interpolated each frame until complete.  Otherwise the value is
+     * applied immediately via attr.set().
+     *
+     * An AnimateDescriptor in target overrides the node-level TransitionSpec
+     * for this one call.
+     */
+    void animate_prop(Prop p, const AttribValue& target);
+
+    /**
+     * @brief Advance all active tweens by dt seconds; recurse into children.
+     * Called once per frame by Core::process_default before the layout pass.
+     */
+    void tick_tweens(float dt);
 
     // ── Layout accessors — read Prop values from attr ───────────────────
 

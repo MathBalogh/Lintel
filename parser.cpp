@@ -12,8 +12,27 @@
 // the generic lookup, exactly as they were with the old dispatch tables —
 // just with Prop::xxx keys instead of Node fluent setter lambdas.
 //
+// Animation
+// ---------
+// Event deltas now route through animate_props() instead of apply_props().
+// animate_props calls INode::animate_prop for every property so that, if the
+// node has a matching TransitionSpec, the value is tweened rather than snapped.
+//
+// Two animation directives are supported in the document language:
+//
+//   transition = background-color 0.15 ease-out
+//       Declares that changes to background-color (triggered by any event
+//       delta) should be interpolated over 0.15 s with ease-out.
+//
+//   on hover:
+//       background-color = animate(#2d3561, 0.1, ease-in)
+//       Per-call override: this specific event fires a tween with its own
+//       duration / easing rather than the node-level TransitionSpec.
+//
 
 #include "lexer.h"
+#include "inode.h"
+
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -75,6 +94,81 @@ static bool s_registered = ([] {
             throw std::runtime_error("rgb expects 3 or 4 components");
         return Color::rgb(vals[0], vals[1], vals[2], vals[3]);
     });
+
+    register_value_function("hsl", [] (std::string_view args) -> AttribValue {
+        std::vector<float> vals;
+        size_t pos = 0;
+        while (pos < args.size()) {
+            size_t next = args.find(',', pos);
+            auto part = detail::trim(next == std::string_view::npos
+                                     ? args.substr(pos)
+                                     : args.substr(pos, next - pos));
+            if (!part.empty()) {
+                float f{};
+                std::from_chars(part.data(), part.data() + part.size(), f);
+                vals.push_back(f);
+            }
+            if (next == std::string_view::npos) break;
+            pos = next + 1;
+        }
+        if (vals.size() == 3) vals.push_back(1.0f);
+        else if (vals.size() != 4)
+            throw std::runtime_error("hsl expects 3 or 4 components");
+        return Color::hsl(vals[0], vals[1], vals[2], vals[3]);
+    });
+
+    // animate(value, duration_s, easing)
+    // Example:  background-color = animate(#ffffff, 0.05, ease-out)
+    // Returns an AnimateDescriptor directly in the AttribValue variant.
+    // animate_props() in wire_event lambdas detects it and calls animate_prop
+    // with the per-call duration and easing instead of the node-level spec.
+    register_value_function("animate", [] (std::string_view args) -> AttribValue {
+        // Split into (value-part, duration, easing) by finding the last two
+        // commas that are not inside parentheses.
+        // Simple approach: collect comma positions at depth 0.
+        std::vector<size_t> comma_pos;
+        int depth = 0;
+        for (size_t i = 0; i < args.size(); ++i) {
+            if (args[i] == '(') ++depth;
+            else if (args[i] == ')') --depth;
+            else if (args[i] == ',' && depth == 0) comma_pos.push_back(i);
+        }
+        if (comma_pos.size() < 2)
+            throw std::runtime_error("animate() expects 3 arguments: value, duration, easing");
+
+        // Last two commas delimit duration and easing.
+        const size_t c1 = comma_pos[comma_pos.size() - 2];
+        const size_t c2 = comma_pos[comma_pos.size() - 1];
+
+        const auto val_part = detail::trim(args.substr(0, c1));
+        const auto dur_part = detail::trim(args.substr(c1 + 1, c2 - c1 - 1));
+        const auto ease_part = detail::trim(args.substr(c2 + 1));
+
+        float dur = 0.15f;
+        std::from_chars(dur_part.data(), dur_part.data() + dur_part.size(), dur);
+
+        Easing e = Easing::EaseOut;
+        if (ease_part == "linear")           e = Easing::Linear;
+        else if (ease_part == "ease-in")     e = Easing::EaseIn;
+        else if (ease_part == "ease-in-out") e = Easing::EaseInOut;
+        else if (ease_part == "spring")      e = Easing::Spring;
+
+        // Parse the value portion — only float and Color are interpolatable.
+        // If the value parses to something else (bool, wstring) it will snap
+        // at animate_prop time, which is still valid behaviour.
+        AnimateDescriptor ad;
+        const AttribValue parsed = detail::parse_value(val_part);
+        if (const float* f = std::get_if<float>(&parsed))
+            ad.target = *f;
+        else if (const Color* c = std::get_if<Color>(&parsed))
+            ad.target = *c;
+        else
+            throw std::runtime_error("animate(): target must be a float or color");
+        ad.duration = dur;
+        ad.easing = e;
+        return ad;
+    });
+
     return true;
 })();
 
@@ -310,6 +404,73 @@ static const std::unordered_map<std::string, Prop> k_prop_map = {
     { "opacity",          Prop::Opacity          },
 };
 
+std::string wstring_to_utf8(const std::wstring& wstr) {
+    if (wstr.empty()) return {};
+    int size_needed = WideCharToMultiByte(
+        CP_UTF8, 0, wstr.data(), (int) wstr.size(),
+        nullptr, 0, nullptr, nullptr
+    );
+    std::string out(size_needed, 0);
+    WideCharToMultiByte(
+        CP_UTF8, 0, wstr.data(), (int) wstr.size(),
+        out.data(), size_needed, nullptr, nullptr
+    );
+    return out;
+}
+
+// ---- install_transition -------------------------------------------------
+//
+// Parses "transition = background-color 0.15 ease-out" and stores the spec
+// in INode::transitions_ keyed by Prop.
+//
+// Syntax:  <prop-name> <duration-s> [<easing>]
+//   easing keywords: linear | ease-in | ease-out (default) | ease-in-out | spring
+//
+static void install_transition(Node& n, const std::wstring& spec_w) {
+    // Convert to narrow for table lookup.
+    const std::string spec = wstring_to_utf8(spec_w);
+
+    // Tokenise on whitespace.
+    std::vector<std::string_view> tokens;
+    size_t i = 0;
+
+    while (i < spec.size()) {
+        while (i < spec.size() && std::isspace(static_cast<unsigned char>(spec[i]))) ++i;
+        if (i >= spec.size()) break;
+        size_t j = i;
+        while (j < spec.size() && !std::isspace(static_cast<unsigned char>(spec[j]))) ++j;
+        tokens.push_back(std::string_view(spec).substr(i, j - i));
+        i = j;
+    }
+    if (tokens.empty()) return;
+
+    // Prop name.
+    auto pit = k_prop_map.find(std::string(tokens[0]));
+    if (pit == k_prop_map.end()) {
+        std::cerr << "transition: unknown property '" << tokens[0] << "' — skipped\n";
+        return;
+    }
+
+    TransitionSpec ts;
+
+    // Duration.
+    if (tokens.size() >= 2) {
+        std::from_chars(tokens[1].data(), tokens[1].data() + tokens[1].size(), ts.duration);
+    }
+
+    // Easing keyword.
+    if (tokens.size() >= 3) {
+        const auto& ek = tokens[2];
+        if (ek == "linear")       ts.easing = Easing::Linear;
+        else if (ek == "ease-in")      ts.easing = Easing::EaseIn;
+        else if (ek == "ease-out")     ts.easing = Easing::EaseOut;
+        else if (ek == "ease-in-out")  ts.easing = Easing::EaseInOut;
+        else if (ek == "spring")       ts.easing = Easing::Spring;
+    }
+
+    n.handle<INode>()->transitions_[static_cast<uint32_t>(pit->second)] = ts;
+}
+
 // ---- apply_props --------------------------------------------------------
 //
 // Converts each parsed Property (string key + AttribValue) into a typed
@@ -317,20 +478,31 @@ static const std::unordered_map<std::string, Prop> k_prop_map = {
 // once at tree-build time; no string lookup occurs during layout or draw.
 //
 // Ordering:
-//   1. Shorthand expansion (padding, margin) → calls Node fluent setters.
-//   2. Keyword/enum coercions (direction, align, justify, text-align).
-//   3. Behaviour flags (focusable, draggable) → direct INode flag writes.
-//   4. Generic k_prop_map lookup → attr.set(Prop, value).
+//   1. transition directive   → install_transition (not stored in attr).
+//   2. Shorthand expansion    (padding, margin) → calls Node fluent setters.
+//   3. Keyword/enum coercions (direction, align, justify, text-align).
+//   4. Behaviour flags        (focusable, draggable) → INode flag writes.
+//   5. Generic k_prop_map lookup → attr.set(Prop, value).
 //
 static void apply_props(Node& n, const std::vector<Property>& props) {
     for (const Property& p : props) {
         const AttribValue& v = p.val;
         const std::string& key = p.key;
 
-        // ── 1. Shorthand expansion ─────────────────────────────────────────
+        // ── 1. Transition directive ────────────────────────────────────────
         //
-        // "padding = 8" sets all four sides; "margin = 4 8" uses x/y shorthands
-        // from the Edges constructors.  Only float values make sense here.
+        // "transition = background-color 0.15 ease-out"
+        // Installs a TransitionSpec on the node; not stored in attr.
+        //
+        if (key == "transition") {
+            if (const std::wstring* w = std::get_if<std::wstring>(&v))
+                install_transition(n, *w);
+            continue;
+        }
+
+        // ── 2. Shorthand expansion ─────────────────────────────────────────
+        //
+        // "padding = 8" sets all four sides.  Only float values make sense here.
         //
         if (key == "padding") {
             if (const float* f = std::get_if<float>(&v)) n.padding(Edges(*f));
@@ -341,27 +513,25 @@ static void apply_props(Node& n, const std::vector<Property>& props) {
             continue;
         }
 
-        // ── 2. Keyword/enum coercions ──────────────────────────────────────
+        // ── 3. Keyword / enum coercions ────────────────────────────────────
         //
-        // Enum-valued props are stored as float (integer cast) in attr so they
-        // fit in the AttribValue variant.  The accessors in inode.cpp cast back.
+        // Enum-valued props are stored as float(int(enum)) in attr so they fit
+        // in the AttribValue variant.  The accessors in inode.cpp cast back.
         //
         if (key == "direction") {
             if (const std::wstring* w = std::get_if<std::wstring>(&v)) {
                 Direction d = (*w == L"row") ? Direction::Row : Direction::Column;
-                n.attr().set(Prop::Direction,
-                             static_cast<float>(static_cast<int>(d)));
+                n.attr().set(Prop::Direction, static_cast<float>(static_cast<int>(d)));
             }
             continue;
         }
         if (key == "align") {
             if (const std::wstring* w = std::get_if<std::wstring>(&v)) {
                 Align a = Align::Stretch;
-                if (*w == L"start")   a = Align::Start;
-                if (*w == L"center")  a = Align::Center;
-                if (*w == L"end")     a = Align::End;
-                n.attr().set(Prop::AlignItems,
-                             static_cast<float>(static_cast<int>(a)));
+                if (*w == L"start")  a = Align::Start;
+                if (*w == L"center") a = Align::Center;
+                if (*w == L"end")    a = Align::End;
+                n.attr().set(Prop::AlignItems, static_cast<float>(static_cast<int>(a)));
             }
             continue;
         }
@@ -372,8 +542,7 @@ static void apply_props(Node& n, const std::vector<Property>& props) {
                 if (*w == L"end")           j = Justify::End;
                 if (*w == L"space-between") j = Justify::SpaceBetween;
                 if (*w == L"space-around")  j = Justify::SpaceAround;
-                n.attr().set(Prop::JustifyItems,
-                             static_cast<float>(static_cast<int>(j)));
+                n.attr().set(Prop::JustifyItems, static_cast<float>(static_cast<int>(j)));
             }
             continue;
         }
@@ -383,13 +552,12 @@ static void apply_props(Node& n, const std::vector<Property>& props) {
                 if (*w == L"center")  ta = TextAlign::Center;
                 if (*w == L"right")   ta = TextAlign::Right;
                 if (*w == L"justify") ta = TextAlign::Justify;
-                n.attr().set(Prop::TextAlign,
-                             static_cast<float>(static_cast<int>(ta)));
+                n.attr().set(Prop::TextAlign, static_cast<float>(static_cast<int>(ta)));
             }
             continue;
         }
 
-        // ── 3. Behaviour flags ─────────────────────────────────────────────
+        // ── 4. Behaviour flags ─────────────────────────────────────────────
         //
         // focusable and draggable are stored directly on INode, not in attr.
         //
@@ -402,7 +570,7 @@ static void apply_props(Node& n, const std::vector<Property>& props) {
             continue;
         }
 
-        // ── 4. Generic k_prop_map lookup ──────────────────────────────────
+        // ── 5. Generic k_prop_map lookup ──────────────────────────────────
         //
         // All remaining recognised properties route directly through attr.set().
         // Unknown keys are silently discarded — no arbitrary string storage.
@@ -413,7 +581,102 @@ static void apply_props(Node& n, const std::vector<Property>& props) {
     }
 }
 
-// Wire one event delta onto a node.
+// ---- animate_props -------------------------------------------------------
+//
+// Event-delta version of apply_props.  Routes every assignable property
+// through INode::animate_prop so that nodes with a matching TransitionSpec
+// get a tween rather than a snap.  The transition / padding / margin /
+// enum-coercion / behaviour-flag paths are identical to apply_props; only the
+// final attr assignment is replaced with animate_prop.
+//
+static void animate_props(Node& n, const std::vector<Property>& props) {
+    INode* impl = n.handle<INode>();
+    if (!impl) return;
+
+    for (const Property& p : props) {
+        const AttribValue& v = p.val;
+        const std::string& key = p.key;
+
+        // transition directives in an event block are ignored (they belong
+        // on the base props, not on the delta).
+        if (key == "transition") continue;
+
+        // Shorthand expansion — shorthands go straight through, no tween.
+        if (key == "padding") {
+            if (const float* f = std::get_if<float>(&v)) n.padding(Edges(*f));
+            continue;
+        }
+        if (key == "margin") {
+            if (const float* f = std::get_if<float>(&v)) n.margin(Edges(*f));
+            continue;
+        }
+
+        // Enum coercions — convert to float first, then animate.
+        if (key == "direction") {
+            if (const std::wstring* w = std::get_if<std::wstring>(&v)) {
+                Direction d = (*w == L"row") ? Direction::Row : Direction::Column;
+                impl->animate_prop(Prop::Direction,
+                                   static_cast<float>(static_cast<int>(d)));
+            }
+            continue;
+        }
+        if (key == "align") {
+            if (const std::wstring* w = std::get_if<std::wstring>(&v)) {
+                Align a = Align::Stretch;
+                if (*w == L"start")  a = Align::Start;
+                if (*w == L"center") a = Align::Center;
+                if (*w == L"end")    a = Align::End;
+                impl->animate_prop(Prop::AlignItems,
+                                   static_cast<float>(static_cast<int>(a)));
+            }
+            continue;
+        }
+        if (key == "justify") {
+            if (const std::wstring* w = std::get_if<std::wstring>(&v)) {
+                Justify j = Justify::Start;
+                if (*w == L"center")        j = Justify::Center;
+                if (*w == L"end")           j = Justify::End;
+                if (*w == L"space-between") j = Justify::SpaceBetween;
+                if (*w == L"space-around")  j = Justify::SpaceAround;
+                impl->animate_prop(Prop::JustifyItems,
+                                   static_cast<float>(static_cast<int>(j)));
+            }
+            continue;
+        }
+        if (key == "text-align") {
+            if (const std::wstring* w = std::get_if<std::wstring>(&v)) {
+                TextAlign ta = TextAlign::Left;
+                if (*w == L"center")  ta = TextAlign::Center;
+                if (*w == L"right")   ta = TextAlign::Right;
+                if (*w == L"justify") ta = TextAlign::Justify;
+                impl->animate_prop(Prop::TextAlign,
+                                   static_cast<float>(static_cast<int>(ta)));
+            }
+            continue;
+        }
+
+        // Behaviour flags — no interpolation possible, apply directly.
+        if (key == "focusable") {
+            if (const bool* b = std::get_if<bool>(&v)) n.focusable(*b);
+            continue;
+        }
+        if (key == "draggable") {
+            if (const bool* b = std::get_if<bool>(&v)) n.draggable(*b);
+            continue;
+        }
+
+        // Generic prop — route through animate_prop.
+        auto it = k_prop_map.find(key);
+        if (it != k_prop_map.end())
+            impl->animate_prop(it->second, v);
+    }
+}
+
+// ---- wire_event ----------------------------------------------------------
+//
+// Attaches an event-delta lambda to the node.  The lambda calls animate_props
+// so that properties with a TransitionSpec are tweened rather than snapped.
+//
 static void wire_event(Node& n, const std::string& ev_name,
                        const StyleDelta& delta) {
     auto opt = lookup_event(ev_name);
@@ -423,7 +686,7 @@ static void wire_event(Node& n, const std::string& ev_name,
     }
     StyleDelta captured = delta;
     n.on(*opt, [captured] (WeakNode self) {
-        apply_props(self.as(), captured);
+        animate_props(self.as(), captured);
     });
 }
 

@@ -1,21 +1,24 @@
-$dark   = rgb(0.3, 0.3, 0.3)
-$light  = #FAF9F5
-$grey   = #B0AEA5
-$accent = #788C5D
 
-style border:
-	border-weight = 3
-	border-color = rgb(0.4, 0.4, 0.4)
-	
 root:
-	direction = row
+    align = center
+    justify = center
+	node:
+        width = 200
+        height = 80
+	    background-color = #1e2030
+        corner-radius = 6
+        padding = 10
 
-	text "input":
-		font-size = 24
-		editable = true
-		share = 3
-		padding = 5
+        transition = background-color 0.12 ease-out
+        transition = margin-bottom 0.12 ease-out
+        transition = width 0.12 ease-out
 
-	graph "graph":
-		background-color = #12121a
-		share = 7
+        on mouse-enter:
+            background-color = #2d3a6e
+            margin-bottom = 30
+            width = 220
+
+        on mouse-leave:
+            background-color = #1e2030
+            margin-bottom = 0
+            width = 200

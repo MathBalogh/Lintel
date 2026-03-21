@@ -17,7 +17,22 @@ namespace lintel {
 // ---------------------------------------------------------------------------
 // Prop — unified property key enum
 // ---------------------------------------------------------------------------
-
+//
+// Every addressable property on a node has a single Prop enumerator.  Values
+// in [0, k_hot_count) are "hot": stored in a flat std::array for O(1)
+// indexed access with no hashing.  Values >= k_hot_count are "cold": stored
+// in an overflow unordered_map and used only for node-specific or rarely-read
+// properties.
+//
+// Three categories of hot properties (layout-affecting ones marked with ★):
+//
+//   Visual       BackgroundColor … FontFamily        indices  0–6
+//   Box model ★  Width … Share                       indices  7–18
+//   Layout beh ★ Direction … JustifyItems            indices 19–21
+//
+// Cold properties cover text formatting and graph-specific styling that do
+// not affect the base layout pipeline.
+//
 enum class Prop : uint32_t {
     // ── Visual (hot) ──────────────────────────────────────────────────────
     BackgroundColor = 0,
@@ -88,6 +103,37 @@ inline bool is_layout_prop(Prop p) noexcept {
 }
 
 // ---------------------------------------------------------------------------
+// Easing
+// ---------------------------------------------------------------------------
+
+enum class Easing {
+    Linear,
+    EaseIn,    // Quadratic acceleration.
+    EaseOut,   // Quadratic deceleration (default for UI transitions).
+    EaseInOut, // Symmetric S-curve.
+    Spring,    // Critically-damped overshoot; best for spatial movement.
+};
+
+// ---------------------------------------------------------------------------
+// TransitionSpec
+// ---------------------------------------------------------------------------
+//
+// Describes how a single property animates when its target value changes via
+// an event-delta handler.  Install on a node via:
+//
+//   node.handle<INode>()->transitions_[uint32_t(Prop::BackgroundColor)]
+//       = { 0.15f, Easing::EaseOut };
+//
+// Or in the .ltl document language:
+//
+//   transition = background-color 0.15 ease-out
+//
+struct TransitionSpec {
+    float  duration = 0.15f;
+    Easing easing = Easing::EaseOut;
+};
+
+// ---------------------------------------------------------------------------
 // Color
 // ---------------------------------------------------------------------------
 
@@ -111,6 +157,25 @@ struct Color {
 };
 
 // ---------------------------------------------------------------------------
+// AnimateDescriptor
+// ---------------------------------------------------------------------------
+//
+// Returned by the animate() value function in the document language:
+//
+//     on click:
+//         background-color = animate(#ffffff, 0.05, ease-out)
+//
+// Carries the interpolation target plus per-call duration / easing that
+// override the node-level TransitionSpec for this one event.  Only float
+// and Color are interpolatable; the parser enforces this at tree-build time.
+//
+struct AnimateDescriptor {
+    std::variant<float, Color> target;
+    float  duration = 0.15f;
+    Easing easing = Easing::EaseOut;
+};
+
+// ---------------------------------------------------------------------------
 // Attributes
 // ---------------------------------------------------------------------------
 //
@@ -124,7 +189,13 @@ struct Color {
 // skip subtrees that have not changed since the last layout pass.
 //
 
-using AttribValue = std::variant<float, Color, bool, std::wstring>;
+using AttribValue = std::variant<
+    float,
+    Color,
+    bool,
+    std::wstring,
+    AnimateDescriptor   // per-event animation override; created by animate()
+>;
 
 static constexpr uint32_t k_hot_count = static_cast<uint32_t>(Prop::k_hot_count);
 
@@ -423,7 +494,7 @@ class ImageNode : public Node {
 public:
     ImageNode();
     explicit ImageNode(std::string_view path);
-    ImageNode& source(std::string_view path);   // change image at runtime
+    ImageNode& source(std::string_view path);
 };
 
 // ---------------------------------------------------------------------------

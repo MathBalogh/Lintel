@@ -1,229 +1,212 @@
-#pragma once
-// lexer.h
-//
-// Lexing, preprocessing, value parsing, and AST types for the cpage document language.
-//
-// Responsibilities
-// ----------------
-//  • Variable extraction and substitution  ($name = value)
-//  • Line tokenisation (indent level + trimmed content)
-//  • Value parsing (colours, numbers, strings, keywords)
-//  • Shared AST node/property types consumed by the parser
-//
-#include "core.h"
-#include <algorithm>
-#include <charconv>
-#include <string>
-#include <string_view>
-#include <unordered_map>
+#pragma once  // was missing
+#include "ast.h"
+#include <deque>
 #include <vector>
 
-namespace lintel {
+namespace lintel::parser {
 
-// ----------------------------------------------------------------
-// AST types
-// ----------------------------------------------------------------
+class Lexer {
+    // ── Character classification ─────────────────────────────────────────────
+    static bool is_horiz_space(char c) { return c == ' ' || c == '\t'; }
+    static bool is_ident_start(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'; }
+    // Hyphens allowed in continuations so that font-size, text-color etc. lex as
+    // single tokens.  A trailing '-' is trimmed in keyword_or_ident().
+    static bool is_ident_cont(char c) { return is_ident_start(c) || (c >= '0' && c <= '9') || c == '-'; }
+    static bool is_hex_digit(char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'); }
 
-struct Property {
-    std::string key;
-    AttribValue val;
-};
+    TokenKind parse_keyword(std::string_view);
 
-// StyleDelta holds the properties that change when an event fires.
-// Keyed by the event name string (e.g. "hover", "focus", "disabled").
-using StyleDelta = std::vector<Property>;
+    // ── Source & position ─────────────────────────────────────────────────────
+    std::string_view src_;
+    uint32_t         cur_ = 0;
 
-struct ASTNode {
-    std::string              name;
-    std::string              type;
-    std::vector<std::string> applies;    // ordered list of style names to apply
-    std::vector<Property>    props;
-    std::vector<ASTNode>     children;
+    bool   bounds()           const { return cur_ < src_.size(); }
+    bool   bounds(uint32_t o) const { return (cur_ + o) < src_.size(); }
+    char   ch()               const { return bounds() ? src_[cur_] : '\0'; }
+    char   ch(uint32_t o)     const { return bounds(o) ? src_[cur_ + o] : '\0'; }
 
-    // event name -> property delta
-    std::unordered_map<std::string, StyleDelta> event_styles;
-};
+    // ── Indent tracking ───────────────────────────────────────────────────────
+    std::vector<uint32_t> indent_stack_; // stack of column counts, base is 0
+    std::deque<Token>     pending_;      // synthetic INDENT/DEDENT tokens queued
+    // by handle_indent(), consumed by next()
+    std::deque<Token>     look_;         // peek() lookahead buffer
 
-// ----------------------------------------------------------------
-// String utilities
-// ----------------------------------------------------------------
-namespace detail {
-
-inline bool is_ident(char c) {
-    return std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '-';
-}
-
-inline std::string_view trim(std::string_view s) {
-    size_t b = s.find_first_not_of(" \t\r\n");
-    if (b == std::string_view::npos) return {};
-    size_t e = s.find_last_not_of(" \t\r\n");
-    return s.substr(b, e - b + 1);
-}
-
-inline int indent_of(std::string_view s) {
-    int level = 0;
-    int spaces = 0;
-    for (char c : s) {
-        if (c == '\t') { level++; spaces = 0; }
-        else if (c == ' ') { if (++spaces == 4) { level++; spaces = 0; } }
-        else                break;
+    // ── Token factory ─────────────────────────────────────────────────────────
+    Token make(TokenKind k, uint32_t b, uint32_t e) const {
+        return Token{ k, Range{b, e} };
     }
-    return level;
-}
 
-} // namespace detail
+    // ── Internal scanners ─────────────────────────────────────────────────────
 
-// ----------------------------------------------------------------
-// Preprocessor  (variables)
-// ----------------------------------------------------------------
-namespace detail {
-
-using VarTable = std::vector<std::pair<std::string, std::string>>;
-
-// Removes variable declaration lines from `lines`, returns the table.
-// Longer names are sorted first so substitution avoids prefix collisions.
-inline VarTable extract_vars(std::vector<std::string>& lines) {
-    VarTable vars;
-    std::vector<std::string> rest;
-    for (auto& line : lines) {
-        auto t = trim(line);
-        if (t.starts_with('$')) {
-            auto eq = t.find('=');
-            if (eq != std::string_view::npos) {
-                vars.push_back({
-                    std::string(trim(t.substr(0, eq))),
-                    std::string(trim(t.substr(eq + 1)))
-                               });
+    // Skip spaces/tabs and block comments on the current line.
+    // Does NOT consume '\n' — newlines are handled explicitly in next().
+    void skip_horiz() {
+        while (true) {
+            char c = ch();
+            if (c == ' ' || c == '\t') { ++cur_; continue; }
+            // line comment: skip to (but not past) the newline
+            if (c == '/' && ch(1) == '/') {
+                cur_ += 2;
+                while (ch() != '\n' && ch() != '\0') ++cur_;
+                return; // next char is '\n' or '\0'; let next() handle it
+            }
+            // block comment: may span lines — treated as transparent whitespace
+            if (c == '/' && ch(1) == '*') {
+                cur_ += 2;
+                while (ch() != '\0') {
+                    if (ch() == '*' && ch(1) == '/') { cur_ += 2; break; }
+                    ++cur_;
+                }
                 continue;
             }
-        }
-        rest.push_back(std::move(line));
-    }
-    std::sort(vars.begin(), vars.end(),
-              [] (const auto& a, const auto& b) {
-        return a.first.size() > b.first.size();
-    });
-    lines = std::move(rest);
-    return vars;
-}
-
-inline void apply_vars(std::vector<std::string>& lines, const VarTable& vars) {
-    for (auto& line : lines) {
-        for (auto& [name, val] : vars) {
-            size_t pos = 0;
-            while ((pos = line.find(name, pos)) != std::string::npos) {
-                size_t after = pos + name.size();
-                if (after < line.size() && is_ident(line[after])) {
-                    ++pos;
-                    continue;
-                }
-                line.replace(pos, name.size(), val);
-                pos += val.size();
-            }
-        }
-    }
-}
-
-} // namespace detail
-
-// ----------------------------------------------------------------
-// Value parser
-// ----------------------------------------------------------------
-namespace detail {
-
-// Forward-declared so register_value_function can live in parser.cpp
-// while parse_value calls it.  The map is defined in parser.cpp.
-using ValueFuncParser = std::function<AttribValue(std::string_view)>;
-extern std::unordered_map<std::string, ValueFuncParser> s_value_func_registry;
-
-inline Color parse_hex_color(std::string_view digits) {
-    std::string h(digits);
-    if (h.size() == 3)
-        h = { h[0], h[0], h[1], h[1], h[2], h[2] };
-    if (h.size() == 6)
-        h += "ff";
-    if (h.size() != 8)
-        throw std::runtime_error("malformed hex color");
-    auto byte = [&] (int off) {
-        unsigned v = 0;
-        std::from_chars(h.data() + off, h.data() + off + 2, v, 16);
-        return static_cast<float>(v) / 255.f;
-    };
-    return Color::rgb(byte(0), byte(2), byte(4), byte(6));
-}
-
-// parse_value
-// -----------
-// #rrggbb[aa]            -> Color
-// "string"               -> std::wstring
-// func(args)             -> AttribValue  (registered function)
-// number["px"]           -> float
-// true | false           -> bool
-// <other>                -> std::wstring (unquoted keyword)
-//
-inline AttribValue parse_value(std::string_view raw) {
-    raw = trim(raw);
-    if (raw.empty())
-        return std::wstring{};
-
-    if (raw[0] == '#')
-        return parse_hex_color(raw.substr(1));
-
-    if (raw.front() == '"' && raw.back() == '"') {
-        auto inner = raw.substr(1, raw.size() - 2);
-        return std::wstring(inner.begin(), inner.end());
-    }
-
-    size_t open = raw.find('(');
-    if (open != std::string_view::npos &&
-        raw.back() == ')' &&
-        open > 0 &&
-        is_ident(raw[0])) {
-        std::string fname(trim(raw.substr(0, open)));
-        auto it = s_value_func_registry.find(fname);
-        if (it != s_value_func_registry.end()) {
-            std::string_view args = trim(raw.substr(open + 1, raw.size() - open - 2));
-            return it->second(args);
+            break;
         }
     }
 
-    if (raw.ends_with("px")) {
-        float f{};
-        auto n = raw.substr(0, raw.size() - 2);
-        if (std::from_chars(n.data(), n.data() + n.size(), f).ec == std::errc())
-            return f;
+    // Called immediately after consuming a '\n'.
+    // Skips blank / comment-only lines, then compares the new indentation level
+    // against the stack and pushes Indent / Dedent tokens into pending_.
+    void handle_indent();
+
+    Token number() {
+        uint32_t b = cur_;
+        bool dot = false;
+        while (true) {
+            char c = ch();
+            if (c >= '0' && c <= '9') { ++cur_; continue; }
+            if (c == '.' && !dot) { dot = true; ++cur_; continue; }
+            break;
+        }
+        if (ch() == 'f') ++cur_; // accept "1.0f" format
+        return make(TokenKind::Number, b, cur_);
     }
-    {
-        float f{};
-        if (std::from_chars(raw.data(), raw.data() + raw.size(), f).ec == std::errc())
-            return f;
+
+    Token keyword_or_ident() {
+        uint32_t b = cur_;
+        while (is_ident_cont(ch())) ++cur_;
+        // Trim trailing hyphens so "foo-" does not produce a dangling dash.
+        while (cur_ > b && src_[cur_ - 1] == '-') --cur_;
+
+        std::string_view lexeme = src_.substr(b, cur_ - b);
+
+        if (lexeme == "true" || lexeme == "false")
+            return make(TokenKind::Boolean, b, cur_);
+        if (TokenKind kw = parse_keyword(lexeme); kw != TokenKind::Null)
+            return make(kw, b, cur_);
+        return make(TokenKind::Identifier, b, cur_);
     }
 
-    if (raw == "true")  return true;
-    if (raw == "false") return false;
+    Token hex_color() {
+        uint32_t b = cur_;
+        ++cur_; // consume '#'
+        while (is_hex_digit(ch())) ++cur_;
+        return make(TokenKind::HexColor, b, cur_);
+    }
 
-    return std::wstring(raw.begin(), raw.end());
-}
+    // Quoted string: returns an Identifier whose range covers the content
+    // (without the quote characters themselves).
+    Token quoted_string() {
+        ++cur_; // skip opening '"'
+        uint32_t start = cur_;
+        while (bounds() && ch() != '"' && ch() != '\n' && ch() != '\0') ++cur_;
+        uint32_t e = cur_;
+        if (ch() == '"') {
+            ++cur_;
+        }
+        else {
+            root_.errors.push_back(Error{
+                Range{start, cur_},
+                get_line_column(start),
+                "unclosed string literal"
+                                   });
+        }
+        return make(TokenKind::Identifier, start, e);
+    }
 
-} // namespace detail
+    // Raw next token — does not touch look_.
+    // Callers should go through peek() / pop().
+    Token next();
 
-// ----------------------------------------------------------------
-// Lexer
-// ----------------------------------------------------------------
-struct Line {
-    int         indent;
-    std::string content;
+public:
+    AST& root_;
+
+    explicit Lexer(std::string_view src, AST& root)
+        : src_(src), cur_(0), root_(root) {
+        root_.source = src;
+        indent_stack_.push_back(0); // base indent level
+    }
+
+    // ── Error helpers ─────────────────────────────────────────────────────────
+
+    void error(const Token& at, std::string message) {
+        root_.errors.push_back(Error{
+            at.range,
+            get_line_column(at.range.begin),
+            std::move(message)
+                               });
+    }
+
+    void unexpected_token_error(const Token& t, std::string_view context) {
+        std::string msg = "unexpected token '";
+        msg += std::string(slice(t));
+        msg += '\'';
+        if (!context.empty()) { msg += " in "; msg += context; }
+        error(t, std::move(msg));
+    }
+
+    // ── Lookahead interface ───────────────────────────────────────────────────
+
+    Token pop() {
+        const Token t = peek(0);
+        look_.erase(look_.begin());
+        return t;
+    }
+    const Token& peek(size_t off = 0) {
+        while (off >= look_.size()) look_.push_back(next());
+        return look_[off];
+    }
+    bool match(TokenKind kind) {
+        if (peek().kind != kind) return false;
+        pop();
+        return true;
+    }
+
+    // ── Source utilities ──────────────────────────────────────────────────────
+
+    std::string_view slice(const Node* n) const { return src_.substr(n->contents.begin, n->contents.end - n->contents.begin); }
+    std::string_view slice(const Token& t) const { return src_.substr(t.range.begin, t.range.end - t.range.begin); }
+
+    Token expect(TokenKind kind, std::string_view desc = "") {
+        Token t = pop();
+        if (t.kind == kind) return t;
+        std::string msg = "expected '";
+        msg += desc.empty() ? to_string(kind) : desc;
+        msg += "', found '";
+        msg += std::string(slice(t));
+        msg += '\'';
+        error(t, std::move(msg));
+        return t;
+    }
+
+    // Pop an Identifier token; emit a diagnostic and return "<error>" otherwise.
+    std::string_view identifier() {
+        Token t = pop();
+        if (t.kind == TokenKind::Identifier) return slice(t);
+        if (is_keyword(t.kind))
+            error(t, "expected identifier, got keyword '" + std::string(slice(t)) + '\'');
+        else
+            error(t, "expected identifier");
+        return "<error>";
+    }
+
+    Range get_line_column(uint32_t pos) const {
+        Range loc{ 1, 1 };
+        for (uint32_t i = 0; i < pos && i < src_.size(); ++i) {
+            if (src_[i] == '\n') { ++loc.begin; loc.end = 1; }
+            else { ++loc.end; }
+        }
+        return loc;
+    }
 };
 
-inline std::vector<Line> lex_lines(const std::vector<std::string>& raw) {
-    std::vector<Line> out;
-    out.reserve(raw.size());
-    for (const auto& r : raw) {
-        std::string_view t = detail::trim(r);
-        if (t.empty()) continue;
-        out.push_back({ detail::indent_of(r), std::string(t) });
-    }
-    return out;
-}
-
-} // namespace lintel
+} // namespace lintel::parser

@@ -118,8 +118,8 @@ void Core::process_message(UINT msg, WPARAM wp, LPARAM lp) {
 
         case WM_SIZE:
         {
-            root_impl->attr.set(Prop::Width, (float) win->client_width());
-            root_impl->attr.set(Prop::Height, (float) win->client_height());
+            root_impl->attr.set(property::Width, (float) win->client_width());
+            root_impl->attr.set(property::Height, (float) win->client_height());
             win->resize_swapchain();
             break;
         }
@@ -497,8 +497,7 @@ void Core::process_default() {
     d2d->EndDraw();
 
     // -- Present ---------------------------------------------------------
-    if (win->swapchain)
-        win->swapchain->Present(1, 0); // SyncInterval = 1 -> vsync
+    win->swapchain->Present(1, 0); // SyncInterval = 1 -> vsync
 }
 
 } // namespace lintel

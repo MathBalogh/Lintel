@@ -1,24 +1,923 @@
+accent-green   = #00e5a0
+accent-amber   = #c8a84b
+accent-red     = #e05030
+accent-warn    = #e08020
+bg-root        = #0a0b0d
+bg-top         = #0f1014
+bg-panel       = #0c0d11
+bg-card        = #0f1118
+bg-error       = #150f0a
+border         = #141720
+border-light   = #1f2230
+border-active  = #1e8c5a
+text-muted     = #3a3f55
+text-dim       = #282c3a
+text-bright    = #e8e0cc
+text-normal    = #8898cc
+text-warn      = #b89060
 
-root:
+// ── Reusable styles ────────────────────────────────────────
+
+style topbar:
+    direction = row
+    align = center
+    justify = space-between
+    height = 44
+    padding = 0 20
+    background-color = bg-top
+    border-color = border-light
+    border-weight = 1
+
+style base-chip:
+    direction = row
+    align = center
+    gap = 6
+    padding = 4 10
+    corner-radius = 3
+    focusable = true
+    transition = background-color 0.1 ease-out
+    transition = border-color 0.1 ease-out
+
+style chip-active:
+    apply base-chip
+    background-color = #141720
+    border-color = border-active
+    on mouse-enter:
+        background-color = #1a2b24
+        border-color = accent-green
+    on mouse-leave:
+        background-color = #141720
+        border-color = border-active
+
+style chip-warn:
+    apply base-chip
+    background-color = #1c1510
+    border-color = #7a4a10
+    on mouse-enter:
+        background-color = #2a1e0f
+        border-color = accent-warn
+    on mouse-leave:
+        background-color = #1c1510
+        border-color = #7a4a10
+
+style chip-inactive:
+    apply base-chip
+    background-color = #111216
+    border-color = #282c3a
+    transition = background-color 0.1 ease-out
+    on mouse-enter:
+        background-color = #181a22
+    on mouse-leave:
+        background-color = #111216
+
+style stat-card:
+    direction = column
+    padding = 12
+    corner-radius = 4
+    background-color = bg-card
+    gap = 4
+    margin = 0 0 8 0
+    transition = background-color 0.12 ease-out
+    on mouse-enter:
+        background-color = #141720
+    on mouse-leave:
+        background-color = bg-card
+
+style stat-card-error:
+    apply stat-card
+    background-color = bg-error
+    border-color = #7a2a10
+    border-weight = 1
+    on mouse-enter:
+        background-color = #1e1209
+    on mouse-leave:
+        background-color = bg-error
+
+style btn:
+    direction = row
     align = center
     justify = center
-	node:
-        width = 200
-        height = 80
-	    background-color = #1e2030
-        corner-radius = 6
-        padding = 10
+    height = 32
+    corner-radius = 3
+    background-color = #141720
+    border-color = #2a3050
+    border-weight = 1
+    margin = 0 0 6 0
+    focusable = true
+    transition = background-color 0.1 ease-out
+    transition = border-color 0.1 ease-out
+    on mouse-enter:
+        background-color = #1e2444
+        border-color = #4a5888
+    on mouse-leave:
+        background-color = #141720
+        border-color = #2a3050
+    on mouse-down:
+        background-color = #0e1028
 
-        transition = background-color 0.12 ease-out
-        transition = margin-bottom 0.12 ease-out
-        transition = width 0.12 ease-out
+style btn-danger:
+    apply btn
+    background-color = bg-error
+    border-color = #7a2a10
+    on mouse-enter:
+        background-color = #251510
+        border-color = #c04020
+    on mouse-leave:
+        background-color = bg-error
+        border-color = #7a2a10
+    on mouse-down:
+        background-color = #0e0805
 
-        on mouse-enter:
-            background-color = #2d3a6e
-            margin-bottom = 30
+style log-row:
+    direction = row
+    align = center
+    height = 22
+    padding = 0 12
+    gap = 10
+    transition = background-color 0.06 ease-out
+    on mouse-enter:
+        background-color = #0f1014
+    on mouse-leave:
+        background-color = #00000000
+
+style log-row-warn:
+    apply log-row
+    on mouse-enter:
+        background-color = #14120a
+    on mouse-leave:
+        background-color = #00000000
+
+style log-row-error:
+    apply log-row
+    background-color = #12090a
+    on mouse-enter:
+        background-color = #1c0e10
+    on mouse-leave:
+        background-color = #12090a
+
+style inspector-field:
+    direction = row
+    align = center
+    justify = space-between
+    height = 20
+
+style filter-tab:
+    padding = 3 8
+    corner-radius = 2
+    focusable = true
+    transition = background-color 0.08 ease-out
+
+// ── Root layout ────────────────────────────────────────────
+
+root:
+    direction = column
+    align = stretch
+    gap = 0
+    background-color = bg-root
+
+    // Top bar
+    node "topbar":
+        apply topbar
+        node:
+            direction = row
+            align = center
+            gap = 10
+            node "status-dot":
+                width = 8
+                height = 8
+                corner-radius = 4
+                background-color = accent-green
+            text "app-title":
+                content = "LINTEL RECV"
+                font-size = 12
+                font-family = "monospace"
+                text-color = text-bright
+                bold = true
+            text "build-tag":
+                content = "v2.4.1"
+                font-size = 11
+                font-family = "monospace"
+                text-color = text-muted
+        node:
+            direction = row
+            align = center
+            gap = 16
+            text "session-id":
+                content = "SESSION 9F3C-A12B"
+                font-size = 11
+                font-family = "monospace"
+                text-color = text-muted
+            text "clock":
+                content = "00:00:00 UTC"
+                font-size = 11
+                font-family = "monospace"
+                text-color = accent-amber
+
+    // Source strip
+    node "source-strip":
+        direction = row
+        align = center
+        gap = 8
+        padding = 10 20
+        height = 52
+        background-color = bg-panel
+        text:
+            content = "SOURCES"
+            font-size = 10
+            font-family = "monospace"
+            text-color = text-muted
+            bold = true
+            width = 58
+        node "src-tcp":
+            apply chip-active
+            node:
+                width = 6
+                height = 6
+                corner-radius = 3
+                background-color = accent-green
+            text:
+                content = "TCP :9000"
+                font-size = 11
+                font-family = "monospace"
+                text-color = #a8c4b8
+        node "src-udp":
+            apply chip-active
+            node:
+                width = 6
+                height = 6
+                corner-radius = 3
+                background-color = accent-green
+            text:
+                content = "UDP :5514"
+                font-size = 11
+                font-family = "monospace"
+                text-color = #a8c4b8
+        node "src-kafka":
+            apply chip-warn
+            node:
+                width = 6
+                height = 6
+                corner-radius = 3
+                background-color = accent-warn
+            text:
+                content = "KAFKA lag+4k"
+                font-size = 11
+                font-family = "monospace"
+                text-color = text-warn
+        node "src-stdin":
+            apply chip-inactive
+            text:
+                content = "STDIN"
+                font-size = 11
+                font-family = "monospace"
+                text-color = text-muted
+
+    // Main body
+    node "body":
+        direction = row
+        align = stretch
+        share = 1
+
+        // Left panel
+        node "left-panel":
+            direction = column
             width = 220
+            padding = 12
+            background-color = bg-panel
+            gap = 0
 
-        on mouse-leave:
-            background-color = #1e2030
-            margin-bottom = 0
-            width = 200
+            node "stat-throughput":
+                apply stat-card
+                text:
+                    content = "THROUGHPUT"
+                    font-size = 9
+                    font-family = "monospace"
+                    text-color = text-muted
+                    bold = true
+                text "val-throughput":
+                    content = "1.84 MB/s"
+                    font-size = 22
+                    font-family = "monospace"
+                    text-color = accent-amber
+                    bold = true
+                text:
+                    content = "↑ 12% vs 5m avg"
+                    font-size = 10
+                    font-family = "monospace"
+                    text-color = #1e8c5a
+
+            node "stat-msgrate":
+                apply stat-card
+                text:
+                    content = "MSG / SEC"
+                    font-size = 9
+                    font-family = "monospace"
+                    text-color = text-muted
+                    bold = true
+                text "val-msgrate":
+                    content = "3,412"
+                    font-size = 22
+                    font-family = "monospace"
+                    text-color = accent-amber
+                    bold = true
+                text:
+                    content = "peak 5,100 drop 0"
+                    font-size = 10
+                    font-family = "monospace"
+                    text-color = text-muted
+
+            node "stat-errors":
+                apply stat-card-error
+                text:
+                    content = "ERRORS / SEC"
+                    font-size = 9
+                    font-family = "monospace"
+                    text-color = #7a3a2a
+                    bold = true
+                text "val-errors":
+                    content = "47"
+                    font-size = 22
+                    font-family = "monospace"
+                    text-color = accent-red
+                    bold = true
+                text:
+                    content = "↑ CRC mismatch ×31"
+                    font-size = 10
+                    font-family = "monospace"
+                    text-color = #a04030
+
+            node "stat-queue":
+                apply stat-card
+                text:
+                    content = "QUEUE DEPTH"
+                    font-size = 9
+                    font-family = "monospace"
+                    text-color = text-muted
+                    bold = true
+                text "val-queue":
+                    content = "12,048"
+                    font-size = 22
+                    font-family = "monospace"
+                    text-color = accent-amber
+                    bold = true
+                text:
+                    content = "capacity 50k (24%)"
+                    font-size = 10
+                    font-family = "monospace"
+                    text-color = text-muted
+
+            text:
+                content = "CONTROLS"
+                font-size = 9
+                font-family = "monospace"
+                text-color = text-muted
+                bold = true
+                margin = 0 0 6 0
+
+            node "btn-pause":
+                apply btn
+                text:
+                    content = "⏸ PAUSE INGEST"
+                    font-size = 11
+                    font-family = "monospace"
+                    text-color = text-normal
+                    bold = true
+
+            node "btn-flush":
+                apply btn
+                text:
+                    content = "⟳ FLUSH QUEUE"
+                    font-size = 11
+                    font-family = "monospace"
+                    text-color = text-normal
+                    bold = true
+
+            node "btn-clear-errors":
+                apply btn-danger
+                text:
+                    content = "✕ CLEAR ERRORS"
+                    font-size = 11
+                    font-family = "monospace"
+                    text-color = #c06040
+                    bold = true
+
+        // Center panel
+        node "center-panel":
+            direction = column
+            share = 1
+
+            node "graph-area":
+                height = 160
+                padding = 12
+                background-color = bg-root
+                border-color = border
+                border-weight = 1
+
+                node "graph-header":
+                    direction = row
+                    align = center
+                    justify = space-between
+                    height = 18
+                    margin = 0 0 8 0
+                    text:
+                        content = "THROUGHPUT — last 60 s"
+                        font-size = 10
+                        font-family = "monospace"
+                        text-color = text-muted
+                        bold = true
+                    node:
+                        direction = row
+                        align = center
+                        gap = 14
+                        node:
+                            direction = row
+                            align = center
+                            gap = 5
+                            node:
+                                width = 8
+                                height = 2
+                                background-color = accent-amber
+                            text:
+                                content = "RX bytes"
+                                font-size = 10
+                                font-family = "monospace"
+                                text-color = text-muted
+                        node:
+                            direction = row
+                            align = center
+                            gap = 5
+                            node:
+                                width = 8
+                                height = 2
+                                background-color = #4870c8
+                            text:
+                                content = "TX bytes"
+                                font-size = 10
+                                font-family = "monospace"
+                                text-color = text-muted
+
+                graph "throughput-graph":
+                    share = 1
+                    grid-color = #141820
+                    grid-weight = 1
+                    label-color = text-muted
+                    label-font-size = 9
+
+            node "log-panel":
+                share = 1
+                direction = column
+                background-color = bg-root
+
+                node "log-toolbar":
+                    direction = row
+                    align = center
+                    justify = space-between
+                    height = 36
+                    padding = 0 12
+                    background-color = bg-panel
+                    border-color = border
+                    border-weight = 1
+                    node:
+                        direction = row
+                        align = center
+                        gap = 12
+                        text:
+                            content = "LOG STREAM"
+                            font-size = 10
+                            font-family = "monospace"
+                            text-color = text-muted
+                            bold = true
+                        node "filter-all":
+                            apply filter-tab
+                            background-color = #1e2444
+                            on mouse-enter:
+                                background-color = #2a3060
+                            on mouse-leave:
+                                background-color = #1e2444
+                            text:
+                                content = "ALL"
+                                font-size = 10
+                                font-family = "monospace"
+                                text-color = text-normal
+                                bold = true
+                        node "filter-errors":
+                            apply filter-tab
+                            background-color = #141214
+                            on mouse-enter:
+                                background-color = #221818
+                            on mouse-leave:
+                                background-color = #141214
+                            text:
+                                content = "ERRORS"
+                                font-size = 10
+                                font-family = "monospace"
+                                text-color = #503030
+                                bold = true
+                        node "filter-warn":
+                            apply filter-tab
+                            background-color = #141214
+                            on mouse-enter:
+                                background-color = #1e1a10
+                            on mouse-leave:
+                                background-color = #141214
+                            text:
+                                content = "WARN"
+                                font-size = 10
+                                font-family = "monospace"
+                                text-color = #504020
+                                bold = true
+                    node "log-search":
+                        direction = row
+                        align = center
+                        width = 180
+                        height = 24
+                        padding = 0 8
+                        corner-radius = 3
+                        background-color = #0f1014
+                        border-color = #282c3a
+                        border-weight = 1
+                        focusable = true
+                        transition = border-color 0.1 ease-out
+                        on focus:
+                            border-color = #4a5888
+                        on blur:
+                            border-color = #282c3a
+                        text "search-input":
+                            content = "filter pattern…"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = text-muted
+                            editable = true
+
+                node "log-rows":
+                    share = 1
+                    direction = column
+                    padding = 4 0
+
+                    node "row-1":
+                        apply log-row
+                        text:
+                            content = "14:22:07.831"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = text-muted
+                            width = 90
+                        text:
+                            content = "INFO"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = #4870c8
+                            bold = true
+                            width = 40
+                        text:
+                            content = "tcp.recv"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = text-muted
+                            width = 70
+                        text:
+                            content = "accepted connection from 10.0.1.44:52180"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = text-normal
+
+                    node "row-2":
+                        apply log-row-warn
+                        text:
+                            content = "14:22:07.714"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = text-muted
+                            width = 90
+                        text:
+                            content = "WARN"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = accent-amber
+                            bold = true
+                            width = 40
+                        text:
+                            content = "kafka.lag"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = text-muted
+                            width = 70
+                        text:
+                            content = "consumer lag exceeded threshold: 4,122 msgs"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = #a08840
+
+                    node "row-3":
+                        apply log-row-error
+                        text:
+                            content = "14:22:07.602"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = #503030
+                            width = 90
+                        text:
+                            content = "ERROR"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = accent-red
+                            bold = true
+                            width = 40
+                        text:
+                            content = "udp.parse"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = #503030
+                            width = 70
+                        text:
+                            content = "CRC mismatch on frame 0xA3F9 (discard)"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = #c04030
+
+                    node "row-4":
+                        apply log-row
+                        text:
+                            content = "14:22:07.441"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = text-muted
+                            width = 90
+                        text:
+                            content = "INFO"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = #4870c8
+                            bold = true
+                            width = 40
+                        text:
+                            content = "queue.flush"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = text-muted
+                            width = 70
+                        text:
+                            content = "flushed 2,048 messages to sink /data/raw"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = text-normal
+
+                    node "row-5":
+                        apply log-row
+                        text:
+                            content = "14:22:07.210"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = text-muted
+                            width = 90
+                        text:
+                            content = "INFO"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = #4870c8
+                            bold = true
+                            width = 40
+                        text:
+                            content = "tcp.recv"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = text-muted
+                            width = 70
+                        text:
+                            content = "3,412 frames received this second"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = text-normal
+
+        // Right panel
+        node "right-panel":
+            direction = column
+            width = 260
+            background-color = bg-panel
+            border-color = border
+            border-weight = 1
+
+            node "inspector-header":
+                direction = row
+                align = center
+                justify = space-between
+                height = 36
+                padding = 0 12
+                border-color = border
+                border-weight = 1
+                text:
+                    content = "INSPECTOR"
+                    font-size = 10
+                    font-family = "monospace"
+                    text-color = text-muted
+                    bold = true
+                text:
+                    content = "frame 0xA3F8"
+                    font-size = 10
+                    font-family = "monospace"
+                    text-color = accent-amber
+
+            node "inspector-body":
+                share = 1
+                direction = column
+                padding = 12
+                gap = 10
+
+                node "field-group-routing":
+                    direction = column
+                    gap = 6
+                    text:
+                        content = "ROUTING"
+                        font-size = 9
+                        font-family = "monospace"
+                        text-color = text-muted
+                        bold = true
+                        margin = 0 0 2 0
+                    node:
+                        apply inspector-field
+                        text:
+                            content = "src"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = text-muted
+                        text:
+                            content = "10.0.1.44:52180"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = text-normal
+                    node:
+                        apply inspector-field
+                        text:
+                            content = "dst"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = text-muted
+                        text:
+                            content = "0.0.0.0:9000"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = text-normal
+                    node:
+                        apply inspector-field
+                        text:
+                            content = "proto"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = text-muted
+                        text:
+                            content = "TCP"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = #4870c8
+
+                node:
+                    height = 1
+                    background-color = border
+
+                node "field-group-frame":
+                    direction = column
+                    gap = 6
+                    text:
+                        content = "FRAME"
+                        font-size = 9
+                        font-family = "monospace"
+                        text-color = text-muted
+                        bold = true
+                        margin = 0 0 2 0
+                    node:
+                        apply inspector-field
+                        text:
+                            content = "seq"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = text-muted
+                        text:
+                            content = "00041,882"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = text-normal
+                    node:
+                        apply inspector-field
+                        text:
+                            content = "len"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = text-muted
+                        text:
+                            content = "512 bytes"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = text-normal
+                    node:
+                        apply inspector-field
+                        text:
+                            content = "crc"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = text-muted
+                        text:
+                            content = "0xF4A2 ✓"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = #1e8c5a
+                    node:
+                        apply inspector-field
+                        text:
+                            content = "ts"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = text-muted
+                        text:
+                            content = "14:22:07.831"
+                            font-size = 11
+                            font-family = "monospace"
+                            text-color = accent-amber
+
+                node:
+                    height = 1
+                    background-color = border
+
+                node "payload-section":
+                    direction = column
+                    gap = 6
+                    text:
+                        content = "PAYLOAD"
+                        font-size = 9
+                        font-family = "monospace"
+                        text-color = text-muted
+                        bold = true
+                        margin = 0 0 2 0
+                    node "hex-view":
+                        direction = column
+                        padding = 8
+                        corner-radius = 3
+                        background-color = #080910
+                        gap = 3
+                        text:
+                            content = "4865 6c6c 6f20 576f 726c 640a 0000"
+                            font-size = 10
+                            font-family = "monospace"
+                            text-color = #1e8c5a
+                            wrap = true
+                        text:
+                            content = "0000 0000 0000 0000 0000 0000 0000"
+                            font-size = 10
+                            font-family = "monospace"
+                            text-color = #1e4a3a
+                            wrap = true
+                        text:
+                            content = "0000 0000 0000 0000 0000 0000 0000"
+                            font-size = 10
+                            font-family = "monospace"
+                            text-color = #1e4a3a
+                            wrap = true
+
+    // Status bar
+    node "statusbar":
+        direction = row
+        align = center
+        justify = space-between
+        height = 24
+        padding = 0 12
+        background-color = #080910
+        border-color = border
+        border-weight = 1
+        node:
+            direction = row
+            align = center
+            gap = 16
+            text:
+                content = "● RUNNING"
+                font-size = 10
+                font-family = "monospace"
+                text-color = #1e8c5a
+                bold = true
+            text:
+                content = "uptime 4d 07h 33m"
+                font-size = 10
+                font-family = "monospace"
+                text-color = text-muted
+            text:
+                content = "workers 8/8"
+                font-size = 10
+                font-family = "monospace"
+                text-color = text-muted
+        node:
+            direction = row
+            align = center
+            gap = 16
+            text:
+                content = "mem 412 MB"
+                font-size = 10
+                font-family = "monospace"
+                text-color = text-muted
+            text:
+                content = "cpu 14%"
+                font-size = 10
+                font-family = "monospace"
+                text-color = text-muted
+            text:
+                content = "lintel 2.4.1 · linux/amd64"
+                font-size = 10
+                font-family = "monospace"
+                text-color = text-dim

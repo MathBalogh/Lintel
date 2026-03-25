@@ -5,61 +5,66 @@
 
 namespace lintel {
 
+void INode::apply(Property p, AttribValue val) {
+    attr.set(p, val);
+    apply_notifier(p);
+}
+
 // ===========================================================================
 // Layout accessors — read from attr with typed defaults
 // ===========================================================================
 //
-// Enum-valued props (Direction, Align, Justify) are stored as float (integer
+// Enum-valued property::s (Direction, Align, Justify) are stored as float (integer
 // cast) in the attribute map — the same convention used by TextAlign — because
 // AttribValue has no enum slot.  The accessors cast back on read.
 //
 
 float INode::layout_width()  const {
-    return attr.get_or<float>(Prop::Width, nan_f());
+    return attr.get_or<float>(property::Width, nan_f());
 }
 float INode::layout_height() const {
-    return attr.get_or<float>(Prop::Height, nan_f());
+    return attr.get_or<float>(property::Height, nan_f());
 }
 float INode::layout_gap()   const {
-    return attr.get_or<float>(Prop::Gap, 0.f);
+    return attr.get_or<float>(property::Gap, 0.f);
 }
 float INode::layout_share() const {
-    return attr.get_or<float>(Prop::Share, 1.f);
+    return attr.get_or<float>(property::Share, 1.f);
 }
 
 Edges INode::layout_padding() const {
     return Edges(
-        attr.get_or<float>(Prop::PaddingTop, 0.f),
-        attr.get_or<float>(Prop::PaddingRight, 0.f),
-        attr.get_or<float>(Prop::PaddingBottom, 0.f),
-        attr.get_or<float>(Prop::PaddingLeft, 0.f));
+        attr.get_or<float>(property::PaddingTop, 0.f),
+        attr.get_or<float>(property::PaddingRight, 0.f),
+        attr.get_or<float>(property::PaddingBottom, 0.f),
+        attr.get_or<float>(property::PaddingLeft, 0.f));
 }
 
 Edges INode::layout_margin() const {
     return Edges(
-        attr.get_or<float>(Prop::MarginTop, 0.f),
-        attr.get_or<float>(Prop::MarginRight, 0.f),
-        attr.get_or<float>(Prop::MarginBottom, 0.f),
-        attr.get_or<float>(Prop::MarginLeft, 0.f));
+        attr.get_or<float>(property::MarginTop, 0.f),
+        attr.get_or<float>(property::MarginRight, 0.f),
+        attr.get_or<float>(property::MarginBottom, 0.f),
+        attr.get_or<float>(property::MarginLeft, 0.f));
 }
 
 Direction INode::layout_direction() const {
     const float raw = attr.get_or<float>(
-        Prop::Direction,
+        property::Direction,
         static_cast<float>(static_cast<int>(Direction::Column)));
     return static_cast<Direction>(static_cast<int>(raw));
 }
 
 Align INode::layout_align() const {
     const float raw = attr.get_or<float>(
-        Prop::AlignItems,
+        property::AlignItems,
         static_cast<float>(static_cast<int>(Align::Stretch)));
     return static_cast<Align>(static_cast<int>(raw));
 }
 
 Justify INode::layout_justify() const {
     const float raw = attr.get_or<float>(
-        Prop::JustifyItems,
+        property::JustifyItems,
         static_cast<float>(static_cast<int>(Justify::Start)));
     return static_cast<Justify>(static_cast<int>(raw));
 }
@@ -186,8 +191,8 @@ void INode::measure(float avail_w, float avail_h) {
     // ── Early exit: nothing changed since the last layout pass ────────────
     //
     // Skip the subtree when:
-    //   1. No box-model / layout-behavior prop has been written.
-    //   2. No tween is currently animating a layout prop on this subtree.
+    //   1. No box-model / layout-behavior property:: has been written.
+    //   2. No tween is currently animating a layout property:: on this subtree.
     //   3. The parent is offering exactly the same available space.
     //
     if (!attr.layout_dirty &&
@@ -461,20 +466,20 @@ void INode::draw(Node& self, Canvas& canvas) {
 }
 
 void INode::draw_default(Canvas& canvas) {
-    const float radius = attr.get_or<float>(Prop::CornerRadius, 0.f);
+    const float radius = attr.get_or<float>(property::CornerRadius, 0.f);
 
-    if (const Color* bg = attr.get<Color>(Prop::BackgroundColor))
+    if (const Color* bg = attr.get<Color>(property::BackgroundColor))
         canvas.fill_rect(rect, *bg, radius);
 
-    if (attr.has(Prop::BorderColor) && attr.has(Prop::BorderWeight)) {
-        const Color& bc = *attr.get<Color>(Prop::BorderColor);
-        const float  bw = attr.get_or<float>(Prop::BorderWeight, 1.f);
+    if (attr.has(property::BorderColor) && attr.has(property::BorderWeight)) {
+        const Color& bc = *attr.get<Color>(property::BorderColor);
+        const float  bw = attr.get_or<float>(property::BorderWeight, 1.f);
         canvas.stroke_rect(rect, bc, bw, radius);
     }
 }
 
 // ===========================================================================
-// Animation — tick_tweens, ease, animate_prop
+// Animation — tick_tweens, ease, animate_property::
 // ===========================================================================
 
 static float ease(float t, Easing e) noexcept {
@@ -486,7 +491,7 @@ static float ease(float t, Easing e) noexcept {
         case Easing::Spring:
         {
             // Critically-damped spring: slight overshoot, then settles.
-            // exp(-6t)*cos(8t) approximation; avoid for colour props.
+            // exp(-6t)*cos(8t) approximation; avoid for colour property::s.
             const float e6 = std::exp(-6.f * t);
             const float c8 = std::cos(8.f * t);
             return 1.f - e6 * c8;
@@ -505,9 +510,9 @@ void INode::tick_tweens(float dt) {
         const bool  done = (raw_t >= 1.f);
         const float t = ease(done ? 1.f : raw_t, it->easing);
 
-        // Write the interpolated value directly; bypass animate_prop to avoid
+        // Write the interpolated value directly; bypass animate_property:: to avoid
         // spawning a new tween and to suppress the layout_dirty dance for
-        // visual-only props.
+        // visual-only property::s.
         if (auto* ff = std::get_if<std::pair<float, float>>(&it->range)) {
             const float v = ff->first + (ff->second - ff->first) * t;
             attr.set(it->prop, v);
@@ -538,7 +543,7 @@ void INode::tick_tweens(float dt) {
     }
 }
 
-void INode::animate_prop(Prop p, const AttribValue& target) {
+void INode::animate_prop(Property p, const AttribValue& target) {
     // Unwrap AnimateDescriptor if that's what arrived (from the animate() function).
     const float* effective_float = nullptr;
     const Color* effective_color = nullptr;
@@ -581,7 +586,7 @@ void INode::animate_prop(Prop p, const AttribValue& target) {
         return;
     }
 
-    // Cancel any existing tween for this prop.
+    // Cancel any existing tween for this property::.
     tweens_.erase(std::remove_if(tweens_.begin(), tweens_.end(),
                   [p] (const Tween& tw) { return tw.prop == p; }), tweens_.end());
 
@@ -593,7 +598,7 @@ void INode::animate_prop(Prop p, const AttribValue& target) {
     tw.easing = spec.easing;
 
     if (effective_float) {
-        // Fall back to 0.f, not *effective_float, so an unset prop always
+        // Fall back to 0.f, not *effective_float, so an unset property:: always
         // starts its first tween from zero rather than snapping (from==to).
         const float from = attr.get_or<float>(p, 0.f);
         tw.range = std::pair<float, float>{ from, *effective_float };
@@ -685,60 +690,60 @@ Node* Node::child(size_t index) {
 // Node — style / layout setters (fluent)
 // ===========================================================================
 //
-// Every setter writes to attr using the canonical Prop key.  This is the
+// Every setter writes to attr using the canonical property:: key.  This is the
 // single path shared by the programmatic API, the parser, and event-delta
 // handlers.  layout_dirty is set automatically by Attributes::set() for the
-// box-model and layout-behavior properties.
+// box-model and layout-behavior property::erties.
 //
 
 Attributes& Node::attr() { return iptr_->attr; }
 Node& Node::attr(const Attributes& s) { iptr_->attr = s; return *this; }
 
-Node& Node::share(float s) { iptr_->attr.set(Prop::Share, s); return *this; }
-Node& Node::width(float w) { iptr_->attr.set(Prop::Width, w); return *this; }
-Node& Node::height(float h) { iptr_->attr.set(Prop::Height, h); return *this; }
+Node& Node::share(float s) { iptr_->attr.set(property::Share, s); return *this; }
+Node& Node::width(float w) { iptr_->attr.set(property::Width, w); return *this; }
+Node& Node::height(float h) { iptr_->attr.set(property::Height, h); return *this; }
 
 Node& Node::padding(Edges e) {
-    iptr_->attr.set(Prop::PaddingTop, e.top);
-    iptr_->attr.set(Prop::PaddingRight, e.right);
-    iptr_->attr.set(Prop::PaddingBottom, e.bottom);
-    iptr_->attr.set(Prop::PaddingLeft, e.left);
+    iptr_->attr.set(property::PaddingTop, e.top);
+    iptr_->attr.set(property::PaddingRight, e.right);
+    iptr_->attr.set(property::PaddingBottom, e.bottom);
+    iptr_->attr.set(property::PaddingLeft, e.left);
     return *this;
 }
 
 Node& Node::margin(Edges e) {
-    iptr_->attr.set(Prop::MarginTop, e.top);
-    iptr_->attr.set(Prop::MarginRight, e.right);
-    iptr_->attr.set(Prop::MarginBottom, e.bottom);
-    iptr_->attr.set(Prop::MarginLeft, e.left);
+    iptr_->attr.set(property::MarginTop, e.top);
+    iptr_->attr.set(property::MarginRight, e.right);
+    iptr_->attr.set(property::MarginBottom, e.bottom);
+    iptr_->attr.set(property::MarginLeft, e.left);
     return *this;
 }
 
 Node& Node::row() {
-    iptr_->attr.set(Prop::Direction,
+    iptr_->attr.set(property::Direction,
                     static_cast<float>(static_cast<int>(Direction::Row)));
     return *this;
 }
 
 Node& Node::column() {
-    iptr_->attr.set(Prop::Direction,
+    iptr_->attr.set(property::Direction,
                     static_cast<float>(static_cast<int>(Direction::Column)));
     return *this;
 }
 
 Node& Node::align(Align a) {
-    iptr_->attr.set(Prop::AlignItems,
+    iptr_->attr.set(property::AlignItems,
                     static_cast<float>(static_cast<int>(a)));
     return *this;
 }
 
 Node& Node::justify(Justify j) {
-    iptr_->attr.set(Prop::JustifyItems,
+    iptr_->attr.set(property::JustifyItems,
                     static_cast<float>(static_cast<int>(j)));
     return *this;
 }
 
-Node& Node::gap(float g) { iptr_->attr.set(Prop::Gap, g); return *this; }
+Node& Node::gap(float g) { iptr_->attr.set(property::Gap, g); return *this; }
 Node& Node::focusable(bool f) { iptr_->focusable_flag = f; return *this; }
 Node& Node::draggable(bool d) { iptr_->draggable_flag = d; return *this; }
 
@@ -760,7 +765,7 @@ void Node::clear_on_of(Event type) {
 // ===========================================================================
 
 float* Node::margin_bottom() {
-    return iptr_->attr.float_ref(Prop::MarginBottom);
+    return iptr_->attr.float_ref(property::MarginBottom);
 }
 
 Rect  Node::rect()    const { return iptr_->rect; }

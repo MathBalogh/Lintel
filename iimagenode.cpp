@@ -72,14 +72,14 @@ void IImageNode::draw(Node& /*self*/, Canvas& canvas) {
 
 ImageNode::ImageNode(): Node(nullptr) {
     impl_allocate<IImageNode>();
-    handle<IImageNode>()->attr.set(Prop::Share, 0.f); // shrink-wrap by default
+    handle<IImageNode>()->attr.set(property::Share, 0.f); // shrink-wrap by default
 }
 
 ImageNode::ImageNode(std::string_view path): Node(nullptr) {
     impl_allocate<IImageNode>();
     IImageNode& n = *handle<IImageNode>();
     n.image_path_ = path;
-    n.attr.set(Prop::Share, 0.f);
+    n.attr.set(property::Share, 0.f);
 }
 
 ImageNode& ImageNode::source(std::string_view path) {

@@ -91,8 +91,8 @@ void IGraphNode::draw_grid(
     float px, float py, float pw, float ph,
     Canvas& canvas) const {
     const Color grid_col = attr.get_or<Color>(
-        Prop::GridColor, Color(0.16f, 0.16f, 0.20f, 1.f));
-    const float grid_w = attr.get_or<float>(Prop::GridWeight, 0.5f);
+        property::GridColor, Color(0.16f, 0.16f, 0.20f, 1.f));
+    const float grid_w = attr.get_or<float>(property::GridWeight, 0.5f);
 
     const float xl = b.xl, xh = b.xh;
     const float yl = b.yl, yh = b.yh;
@@ -147,8 +147,8 @@ void IGraphNode::draw_labels(
     float px, float py, float pw, float ph,
     Canvas& canvas) const {
     const Color label_col = attr.get_or<Color>(
-        Prop::LabelColor, Color(0.42f, 0.46f, 0.55f, 1.f));
-    const float label_sz = attr.get_or<float>(Prop::LabelFontSize, 10.5f);
+        property::LabelColor, Color(0.42f, 0.46f, 0.55f, 1.f));
+    const float label_sz = attr.get_or<float>(property::LabelFontSize, 10.5f);
 
     const float xl = b.xl, xh = b.xh;
     const float yl = b.yl, yh = b.yh;
@@ -271,7 +271,7 @@ void IGraphNode::draw(Node& self, Canvas& canvas) {
 
 GraphNode::GraphNode(): Node(nullptr) {
     impl_allocate<IGraphNode>();
-    handle<IGraphNode>()->attr.set(Prop::Share, 1.f); // fill parent by default
+    handle<IGraphNode>()->attr.set(property::Share, 1.f); // fill parent by default
 }
 
 GraphNode& GraphNode::push_series(

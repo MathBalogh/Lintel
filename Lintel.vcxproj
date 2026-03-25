@@ -127,21 +127,29 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="ast.cpp" />
     <ClCompile Include="canvas.cpp" />
     <ClCompile Include="core.cpp" />
+    <ClCompile Include="framework.cpp" />
     <ClCompile Include="gpu.cpp" />
     <ClCompile Include="igraphnode.cpp" />
     <ClCompile Include="iimagenode.cpp" />
     <ClCompile Include="inode.cpp" />
     <ClCompile Include="itextnode.cpp" />
     <ClCompile Include="iwindow.cpp" />
+    <ClCompile Include="lexer.cpp" />
     <ClCompile Include="lintel.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="load.cpp" />
     <ClCompile Include="parser.cpp" />
+    <ClCompile Include="parser.h" />
+    <ClCompile Include="visitor.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="ast.h" />
     <ClInclude Include="canvas.h" />
     <ClInclude Include="core.h" />
+    <ClInclude Include="framework.h" />
     <ClInclude Include="gpu.h" />
     <ClInclude Include="handle.h" />
     <ClInclude Include="igraphnode.h" />
@@ -151,8 +159,11 @@
     <ClInclude Include="iwindow.h" />
     <ClInclude Include="lexer.h" />
     <ClInclude Include="lintel.h" />
+    <ClInclude Include="types.h" />
+    <ClInclude Include="visitor.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="language.md" />
     <None Include="main.ltl" />
   </ItemGroup>
   <ItemGroup>

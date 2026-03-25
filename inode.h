@@ -28,11 +28,8 @@ inline float nan_f() { return std::numeric_limits<float>::quiet_NaN(); }
 // types are handled without virtual dispatch.
 //
 struct Tween {
-    Prop prop;
-    std::variant<
-        std::pair<float, float>,
-        std::pair<Color, Color>
-    > range;
+    Property prop = 0;
+    std::variant<std::pair<float, float>, std::pair<Color, Color>> range;
     float  elapsed = 0.f;
     float  duration = 0.15f;
     Easing easing = Easing::EaseOut;
@@ -67,6 +64,9 @@ struct Tween {
 class INode {
 public:
     virtual ~INode() = default;
+
+    virtual void apply_notifier(Property p) {}
+    void apply(Property p, AttribValue val);
 
     // -- Handler storage -------------------------------------------------
 
@@ -109,7 +109,7 @@ public:
     // has_active_tweens_: true while tweens_ is non-empty; lets measure()'s
     //   early-exit guard skip the dirty-flag fast path when animating.
     //
-    std::unordered_map<uint32_t, TransitionSpec> transitions_;
+    std::unordered_map<Property, TransitionSpec> transitions_;
     std::vector<Tween>                           tweens_;
     bool                                         has_active_tweens_ = false;
 
@@ -124,7 +124,7 @@ public:
      * An AnimateDescriptor in target overrides the node-level TransitionSpec
      * for this one call.
      */
-    void animate_prop(Prop p, const AttribValue& target);
+    void animate_prop(Property p, const AttribValue& target);
 
     /**
      * @brief Advance all active tweens by dt seconds; recurse into children.

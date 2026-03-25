@@ -16,9 +16,6 @@
     <Filter Include="lib\core\gpu">
       <UniqueIdentifier>{b1ba17ee-f9da-400b-bc07-7cf23fbb52b4}</UniqueIdentifier>
     </Filter>
-    <Filter Include="lib\parser">
-      <UniqueIdentifier>{c5ad18c5-e0f1-4f60-9311-096c32174048}</UniqueIdentifier>
-    </Filter>
     <Filter Include="lib\core\canvas">
       <UniqueIdentifier>{d010ac7f-9aed-4b25-8304-6e484145d76c}</UniqueIdentifier>
     </Filter>
@@ -27,9 +24,6 @@
     </Filter>
     <Filter Include="lib\node">
       <UniqueIdentifier>{c9bca3fb-f7da-4582-b031-34e9d2fc98eb}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="lib\node\text node">
-      <UniqueIdentifier>{042f426d-8751-4da4-9b8e-1911dd0bfd18}</UniqueIdentifier>
     </Filter>
     <Filter Include="lib\node\graph">
       <UniqueIdentifier>{b6cfe4b5-2a08-4e6d-b58c-faa95ea11e7c}</UniqueIdentifier>
@@ -40,28 +34,37 @@
     <Filter Include="lib\node\node">
       <UniqueIdentifier>{b97e22e1-ebf0-438a-9052-cc0caf47a2a8}</UniqueIdentifier>
     </Filter>
+    <Filter Include="lib\framework">
+      <UniqueIdentifier>{a82a1254-6ff9-4139-a9f3-e902cd7b0efa}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lib\node\text node">
+      <UniqueIdentifier>{042f426d-8751-4da4-9b8e-1911dd0bfd18}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lib\ltl">
+      <UniqueIdentifier>{c5ad18c5-e0f1-4f60-9311-096c32174048}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lib\ltl\parser">
+      <UniqueIdentifier>{a4394686-e428-4f10-8ae4-c40205d89899}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lib\ltl\ast">
+      <UniqueIdentifier>{61b835ba-811c-4372-9823-3de2dbecd34f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lib\ltl\load">
+      <UniqueIdentifier>{5e6552b1-ebdb-4314-9ce9-b10770751648}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
     <ClCompile Include="core.cpp">
       <Filter>lib\core</Filter>
     </ClCompile>
     <ClCompile Include="gpu.cpp">
       <Filter>lib\core\gpu</Filter>
     </ClCompile>
-    <ClCompile Include="lintel.cpp">
-      <Filter>lib\api</Filter>
-    </ClCompile>
     <ClCompile Include="iwindow.cpp">
       <Filter>lib\window</Filter>
     </ClCompile>
     <ClCompile Include="inode.cpp">
       <Filter>lib\node\node</Filter>
-    </ClCompile>
-    <ClCompile Include="parser.cpp">
-      <Filter>lib\parser</Filter>
     </ClCompile>
     <ClCompile Include="itextnode.cpp">
       <Filter>lib\node\text node</Filter>
@@ -75,13 +78,37 @@
     <ClCompile Include="iimagenode.cpp">
       <Filter>lib\node\image</Filter>
     </ClCompile>
+    <ClCompile Include="main.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="lintel.cpp">
+      <Filter>lib\api</Filter>
+    </ClCompile>
+    <ClCompile Include="framework.cpp">
+      <Filter>lib\framework</Filter>
+    </ClCompile>
+    <ClCompile Include="lexer.cpp">
+      <Filter>lib\ltl\parser</Filter>
+    </ClCompile>
+    <ClCompile Include="parser.cpp">
+      <Filter>lib\ltl\parser</Filter>
+    </ClCompile>
+    <ClCompile Include="parser.h">
+      <Filter>lib\ltl\parser</Filter>
+    </ClCompile>
+    <ClCompile Include="ast.cpp">
+      <Filter>lib\ltl\ast</Filter>
+    </ClCompile>
+    <ClCompile Include="load.cpp">
+      <Filter>lib\ltl\load</Filter>
+    </ClCompile>
+    <ClCompile Include="visitor.cpp">
+      <Filter>lib\ltl\load</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="core.h">
       <Filter>lib\core</Filter>
-    </ClInclude>
-    <ClInclude Include="lintel.h">
-      <Filter>lib\api</Filter>
     </ClInclude>
     <ClInclude Include="handle.h">
       <Filter>lib\api</Filter>
@@ -98,9 +125,6 @@
     <ClInclude Include="itextnode.h">
       <Filter>lib\node\text node</Filter>
     </ClInclude>
-    <ClInclude Include="lexer.h">
-      <Filter>lib\parser</Filter>
-    </ClInclude>
     <ClInclude Include="igraphnode.h">
       <Filter>lib\node\graph</Filter>
     </ClInclude>
@@ -110,11 +134,30 @@
     <ClInclude Include="iimagenode.h">
       <Filter>lib\node\image</Filter>
     </ClInclude>
+    <ClInclude Include="lintel.h">
+      <Filter>lib\api</Filter>
+    </ClInclude>
+    <ClInclude Include="types.h">
+      <Filter>lib\api</Filter>
+    </ClInclude>
+    <ClInclude Include="framework.h">
+      <Filter>lib\framework</Filter>
+    </ClInclude>
+    <ClInclude Include="lexer.h">
+      <Filter>lib\ltl\parser</Filter>
+    </ClInclude>
+    <ClInclude Include="ast.h">
+      <Filter>lib\ltl\ast</Filter>
+    </ClInclude>
+    <ClInclude Include="visitor.h">
+      <Filter>lib\ltl\load</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="main.ltl">
       <Filter>src</Filter>
     </None>
+    <None Include="language.md" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="image.jpg">

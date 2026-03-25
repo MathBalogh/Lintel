@@ -1,4 +1,5 @@
 #include "itextnode.h"
+#include "framework.h"
 #include <dwrite.h>
 #include <d2d1.h>
 #include <cwctype>
@@ -32,37 +33,51 @@ static DWRITE_TEXT_ALIGNMENT dwrite_alignment(TextAlign a) {
 void ITextNode::sync_style() {
     bool changed = false; // true when a text-metric property changed
 
-    if (const std::wstring* v = attr.get<std::wstring>(Prop::FontFamily)) {
+    if (const std::wstring* v = attr.get<std::wstring>(property::FontFamily)) {
         if (*v != font_family) { font_family = *v; changed = true; }
     }
-    if (const float* v = attr.get<float>(Prop::FontSize)) {
+    if (const float* v = attr.get<float>(property::FontSize)) {
         if (*v != font_size) { font_size = *v; changed = true; }
     }
-    if (const Color* v = attr.get<Color>(Prop::TextColor)) {
+    if (const Color* v = attr.get<Color>(property::TextColor)) {
         text_color = *v; // colour change — no re-measure needed
     }
-    if (const bool* v = attr.get<bool>(Prop::Bold)) {
+    if (const bool* v = attr.get<bool>(property::Bold)) {
         if (*v != bold) { bold = *v; changed = true; }
     }
-    if (const bool* v = attr.get<bool>(Prop::Italic)) {
+    if (const bool* v = attr.get<bool>(property::Italic)) {
         if (*v != italic_val) { italic_val = *v; changed = true; }
     }
-    if (const bool* v = attr.get<bool>(Prop::Wrap)) {
+    if (const bool* v = attr.get<bool>(property::Wrap)) {
         if (*v != wrap) { wrap = *v; changed = true; }
     }
     // TextAlign is stored as float (integer cast) — same convention as Direction.
-    if (const float* v = attr.get<float>(Prop::TextAlign)) {
+    if (const float* v = attr.get<float>(property::TextAlign)) {
         TextAlign ta = static_cast<TextAlign>(static_cast<int>(*v));
         if (ta != text_align_val) { text_align_val = ta; changed = true; }
     }
 
-    editable = attr.get_or<bool>(Prop::Editable, false);
+    editable = attr.get_or<bool>(property::Editable, false);
+
+    if (content.empty()) {
+        Property p = FRAMEWORK.get_property("content");
+        if (auto str = attr.get<std::wstring>(p)) content = *str;
+    }
 
     if (changed) {
         // Text-metric changes affect measured size: force a layout pass and
         // rebuild the DWrite format so the next draw picks up the change.
         attr.layout_dirty = true;
         invalidate_format();
+    }
+}
+
+void ITextNode::apply_notifier(Property p) {
+    // TODO: cache
+    if (p == FRAMEWORK.get_property("content")) {
+        if (auto* str = attr.get<std::wstring>(p)) {
+            content = *str;
+        }
     }
 }
 
@@ -453,7 +468,7 @@ void ITextNode::paste_from_clipboard() {
 TextNode::TextNode(): Node(nullptr) {
     impl_allocate<ITextNode>();
     ITextNode& n = *handle<ITextNode>();
-    n.attr.set(Prop::Share, 0.f); // shrink-wrap by default
+    n.attr.set(property::Share, 0.f); // shrink-wrap by default
     n.wire_events(*this);
 }
 
@@ -461,7 +476,7 @@ TextNode::TextNode(std::wstring_view initial_content): Node(nullptr) {
     impl_allocate<ITextNode>();
     ITextNode& n = *handle<ITextNode>();
     n.content = initial_content;
-    n.attr.set(Prop::Share, 0.f);
+    n.attr.set(property::Share, 0.f);
     n.wire_events(*this);
 }
 
@@ -474,7 +489,7 @@ TextNode& TextNode::content(std::wstring_view c) {
 
 TextNode& TextNode::text_align(TextAlign a) {
     // Stored as float (integer cast) — sync_style() casts back to TextAlign.
-    handle<ITextNode>()->attr.set(Prop::TextAlign,
+    handle<ITextNode>()->attr.set(property::TextAlign,
                                   static_cast<float>(static_cast<int>(a)));
     handle<ITextNode>()->invalidate_format();
     return *this;

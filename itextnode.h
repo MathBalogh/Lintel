@@ -106,6 +106,8 @@ public:
      */
     void sync_style();
 
+    void apply_notifier(Property p) override;
+
     /* -- layout ------------------------------------------------------------- */
     void measure(float avail_w, float avail_h) override;
     void arrange(float slot_x, float slot_y)   override;

@@ -154,6 +154,7 @@
     <ClInclude Include="handle.h" />
     <ClInclude Include="igraphnode.h" />
     <ClInclude Include="iimagenode.h" />
+    <ClInclude Include="include.h" />
     <ClInclude Include="inode.h" />
     <ClInclude Include="itextnode.h" />
     <ClInclude Include="iwindow.h" />

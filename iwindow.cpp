@@ -131,7 +131,7 @@ unsigned int Window::height() const { return iptr_->height; }
 // Window — run loop
 // ===========================================================================
 
-int Window::run() {
+int Window::run(std::function<void()> fn) {
     // Enable immersive dark-mode title bar (Windows 10 20H1+).
     DWORD dark = TRUE;
     DwmSetWindowAttribute(
@@ -144,6 +144,7 @@ int Window::run() {
     SetForegroundWindow(iptr_->hwnd);
 
     // Kick off the worker thread (layout + draw + present loop).
+    iptr_->thread_main = std::move(fn);
     CORE.start();
 
     MSG msg = {};

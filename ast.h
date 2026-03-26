@@ -1,4 +1,5 @@
 #pragma once
+#include "core.h"
 #include <memory_resource>
 #include <string>
 #include <vector>
@@ -106,10 +107,27 @@ struct Node {
 
 // ─── Leaf expression nodes ────────────────────────────────────────────────────
 
-struct IdentExpr : Node { std::string name;  explicit IdentExpr(std::string_view v): Node(NodeKind::IdentExpr), name(v) {} };
-struct NumExpr : Node { std::string text;  explicit NumExpr(std::string_view v): Node(NodeKind::NumExpr), text(v) {} };
-struct HexExpr : Node { std::string value; explicit HexExpr(std::string_view v): Node(NodeKind::HexExpr), value(v) {} };
-struct BoolExpr : Node { bool        value; explicit BoolExpr(bool v): Node(NodeKind::BoolExpr), value(v) {} };
+struct IdentExpr : Node {
+    std::string name; 
+    explicit IdentExpr(std::string_view v): Node(NodeKind::IdentExpr), name(v) {}
+};
+struct NumExpr : Node {
+    std::string text; 
+    explicit NumExpr(std::string_view v): Node(NodeKind::NumExpr), text(v) {}
+
+    float to_number() const;
+};
+struct HexExpr : Node {
+    std::string value;
+
+    explicit HexExpr(std::string_view v): Node(NodeKind::HexExpr), value(v) {}
+
+    Color to_color() const;
+};
+struct BoolExpr : Node {
+    bool value;
+    explicit BoolExpr(bool v): Node(NodeKind::BoolExpr), value(v) {}
+};
 
 struct ListExpr : Node {
     std::vector<Node*> list;

@@ -94,10 +94,6 @@ struct WindowMessage {
 //
 // Singleton that owns the GPU context, the Canvas drawing abstraction, and all
 // global input / focus / pointer state.
-//
-// The EventRegistry has been removed: handlers are now stored directly on each
-// INode instance (see INode::handlers_ in inode.h).
-//
 // Member declaration order matters: gpu must precede canvas because Canvas
 // stores a GpuContext& that is bound at construction time.
 //

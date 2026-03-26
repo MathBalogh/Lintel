@@ -123,7 +123,7 @@ public:
     unsigned int width()  const;
     unsigned int height() const;
 
-    int run();
+    int run(std::function<void()> = nullptr);
 };
 
 // ---------------------------------------------------------------------------

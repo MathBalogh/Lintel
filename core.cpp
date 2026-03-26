@@ -95,6 +95,9 @@ void Core::start() {
                 process_message(msg.msg, msg.wp, msg.lp);
 
             process_default();
+
+            if (window->handle()->thread_main)
+                window->handle()->thread_main();
         }
     });
 }

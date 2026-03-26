@@ -110,40 +110,15 @@ static bool s_registered = ([] {
     return true;
 })();
 
-// ─── Value conversion: AST node → AttribValue ────────────────────────────────
-
-static Color parse_hex_color(std::string_view hex) {
-    if (!hex.empty() && hex[0] == '#') hex.remove_prefix(1);
-    auto nibble = [] (char c) -> uint8_t {
-        if (c >= '0' && c <= '9') return c - '0';
-        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-        return 0;
-    };
-    auto byte2 = [&] (size_t i) -> float {
-        return (nibble(hex[i]) * 16 + nibble(hex[i + 1])) / 255.f;
-    };
-    if (hex.size() == 6) return Color::rgb(byte2(0), byte2(2), byte2(4), 1.f);
-    if (hex.size() == 8) return Color::rgb(byte2(0), byte2(2), byte2(4), byte2(6));
-    std::cerr << "malformed hex colour '#" << hex << "' — defaulted to black\n";
-    return Color::rgb(0.f, 0.f, 0.f, 1.f);
-}
-
 static AttribValue node_to_attrib(const Node* node, const StyleResolver& res) {
     if (!node) return std::wstring{};
     switch (node->kind) {
         case NodeKind::NumExpr:
-        {
-            float f = 0.f;
-            const std::string& t = node->as<NumExpr>().text;
-            std::from_chars(t.data(), t.data() + t.size(), f);
-            return f;
-        }
+            return node->as<NumExpr>().to_number();
         case NodeKind::BoolExpr:
             return node->as<BoolExpr>().value;
-
         case NodeKind::HexExpr:
-            return parse_hex_color(node->as<HexExpr>().value);
+            return node->as<HexExpr>().to_color();
 
         case NodeKind::IdentExpr:
         {
@@ -446,9 +421,6 @@ static void animate_props(lintel::Node& n, const ResolvedProps& props) {
 // ─── Event wiring ─────────────────────────────────────────────────────────────
 //
 // Captures the OnDecl's prop list by value so the lambda is self-contained.
-// The StyleResolver is captured by reference — it outlives the scene graph
-// because it's owned by load() on the same stack frame.
-
 static void wire_event(lintel::Node& n, const OnDecl& on_decl, const StyleResolver& res) {
     auto ev = FRAMEWORK.get_event(on_decl.event);
     if (ev == Event::Null) {
@@ -569,13 +541,7 @@ Node load(const char* path) {
 
     // Pass 1 — parse.
     parser::AST ast;
-    parser::Parser(source, ast).parse();
-
-    if (!ast.errors.empty()) {
-        for (const parser::Error& e : ast.errors)
-            std::cerr << "parse error at " << e.line_column.begin
-            << ':' << e.line_column.end << ": " << e.message << '\n';
-    }
+    parser::parse(source, ast);
 
     // Pass 2 — collect variables and style definitions.
     parser::StyleResolver resolver(ast);

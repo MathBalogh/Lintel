@@ -40,16 +40,16 @@
     <Filter Include="lib\node\text node">
       <UniqueIdentifier>{042f426d-8751-4da4-9b8e-1911dd0bfd18}</UniqueIdentifier>
     </Filter>
-    <Filter Include="lib\ltl">
+    <Filter Include="lib\stylesheet">
       <UniqueIdentifier>{c5ad18c5-e0f1-4f60-9311-096c32174048}</UniqueIdentifier>
     </Filter>
-    <Filter Include="lib\ltl\parser">
+    <Filter Include="lib\stylesheet\parser">
       <UniqueIdentifier>{a4394686-e428-4f10-8ae4-c40205d89899}</UniqueIdentifier>
     </Filter>
-    <Filter Include="lib\ltl\ast">
+    <Filter Include="lib\stylesheet\ast">
       <UniqueIdentifier>{61b835ba-811c-4372-9823-3de2dbecd34f}</UniqueIdentifier>
     </Filter>
-    <Filter Include="lib\ltl\load">
+    <Filter Include="lib\stylesheet\load">
       <UniqueIdentifier>{5e6552b1-ebdb-4314-9ce9-b10770751648}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
@@ -88,22 +88,22 @@
       <Filter>lib\framework</Filter>
     </ClCompile>
     <ClCompile Include="lexer.cpp">
-      <Filter>lib\ltl\parser</Filter>
+      <Filter>lib\stylesheet\parser</Filter>
     </ClCompile>
     <ClCompile Include="parser.cpp">
-      <Filter>lib\ltl\parser</Filter>
+      <Filter>lib\stylesheet\parser</Filter>
     </ClCompile>
     <ClCompile Include="parser.h">
-      <Filter>lib\ltl\parser</Filter>
+      <Filter>lib\stylesheet\parser</Filter>
     </ClCompile>
     <ClCompile Include="ast.cpp">
-      <Filter>lib\ltl\ast</Filter>
+      <Filter>lib\stylesheet\ast</Filter>
     </ClCompile>
     <ClCompile Include="load.cpp">
-      <Filter>lib\ltl\load</Filter>
+      <Filter>lib\stylesheet\load</Filter>
     </ClCompile>
     <ClCompile Include="visitor.cpp">
-      <Filter>lib\ltl\load</Filter>
+      <Filter>lib\stylesheet\load</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -144,20 +144,25 @@
       <Filter>lib\framework</Filter>
     </ClInclude>
     <ClInclude Include="lexer.h">
-      <Filter>lib\ltl\parser</Filter>
+      <Filter>lib\stylesheet\parser</Filter>
     </ClInclude>
     <ClInclude Include="ast.h">
-      <Filter>lib\ltl\ast</Filter>
+      <Filter>lib\stylesheet\ast</Filter>
     </ClInclude>
     <ClInclude Include="visitor.h">
-      <Filter>lib\ltl\load</Filter>
+      <Filter>lib\stylesheet\load</Filter>
+    </ClInclude>
+    <ClInclude Include="include.h">
+      <Filter>lib</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="main.ltl">
       <Filter>src</Filter>
     </None>
-    <None Include="language.md" />
+    <None Include="language.md">
+      <Filter>src</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Image Include="image.jpg">

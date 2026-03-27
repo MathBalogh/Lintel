@@ -159,6 +159,9 @@ public:
 
     // Start the worker thread.
     void start();
+
+    // Stop the worker thread.
+    void shutdown();
 };
 
 // ---------------------------------------------------------------------------

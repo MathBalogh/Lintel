@@ -91,7 +91,7 @@ void Core::start() {
 
             // Drain all pending messages first so the render reflects the
             // latest state rather than an intermediate one.
-            while (try_pop(msg))
+            while (running_ && try_pop(msg))
                 process_message(msg.msg, msg.wp, msg.lp);
 
             process_default();
@@ -100,6 +100,12 @@ void Core::start() {
                 window->handle()->thread_main();
         }
     });
+}
+
+void Core::shutdown() {
+    running_ = false;
+    while (worker_.joinable())
+        worker_.join();
 }
 
 // ---------------------------------------------------------------------------
@@ -500,7 +506,8 @@ void Core::process_default() {
     d2d->EndDraw();
 
     // -- Present ---------------------------------------------------------
-    win->swapchain->Present(1, 0); // SyncInterval = 1 -> vsync
+    if (window)
+        win->swapchain->Present(1, 0); // SyncInterval = 1 -> vsync
 }
 
 } // namespace lintel

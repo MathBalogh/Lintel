@@ -116,8 +116,7 @@ Window::Window() {
         .height(static_cast<float>(H));
 }
 Window::~Window() {
-    // Prevent the worker thread from dereferencing a dangling IWindow pointer.
-    CORE.window.reset();
+    CORE.shutdown();
 }
 
 // ===========================================================================

@@ -50,6 +50,8 @@ Framework::Framework() {
         { "italic", property::Italic },
         { "wrap", property::Wrap },
         { "editable", property::Editable },
+        { "vertical-center", property::VerticalCenter },
+        { "scrollbar", property::Scrollbar },
         { "grid-color", property::GridColor },
         { "grid-weight",property::GridWeight },
         { "label-color", property::LabelColor },

@@ -74,7 +74,11 @@ public:
     explicit TextNode(std::wstring_view content);
 
     TextNode& content(std::wstring_view c);
+
     TextNode& text_align(TextAlign a);
+    TextNode& scrollbar(bool);
+    TextNode& center_vertically(bool);
+
     TextNode& select_all();
     TextNode& deselect();
     std::wstring selected_text() const;

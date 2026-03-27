@@ -44,6 +44,13 @@ namespace lintel {
  * respond to Focus, Blur, and all selection / navigation events so that the
  * caller can style a focused read-only field and the user can select text
  * (e.g. for copy, handled by the application layer).
+ *
+ * New features (added 2026):
+ *   • Text is now clipped to the content area (canvas.push_clip / pop_clip).
+ *   • Optional vertical scrollbar (property::Scrollbar) when content overflows
+ *     vertically. The scrollbar is fully interactive (thumb drag + track click).
+ *   • Vertical centering (property::VerticalCenter) via DWrite paragraph
+ *     alignment (CENTER when enabled and no scrollbar is active).
  */
 class ITextNode : public INode {
 public:
@@ -57,12 +64,22 @@ public:
     bool         wrap = true;
     bool         editable = false;
 
+    /* -- new: vertical centering & scrollbar -------------------------------- */
+    bool         vertical_center = false;     // property::VerticalCenter
+    bool         scrollbar_enabled = false;   // property::Scrollbar
+
     /* -- content & editing state -------------------------------------------- */
     std::wstring content;               // UTF-16 text displayed by this node.
     size_t       caret_pos = 0; // Active end of the selection (0 … size).
     size_t       selection_anchor = 0; // Fixed end of the selection.
     bool         has_focus = false;
     bool         lmb_selecting = false; // True while LMB is held for drag-select.
+
+    /* -- scrollbar state ---------------------------------------------------- */
+    float        scroll_offset_y = 0.f;
+    bool         scrollbar_dragging = false;
+    float        scrollbar_drag_offset = 0.f;
+    float        content_height_ = 0.f; // natural (unclipped) text height, updated in measure()
 
     /* -- selection helpers ------------------------------------------------- */
 
@@ -198,19 +215,45 @@ private:
     size_t word_start(size_t pos) const;
     size_t word_end(size_t pos) const;
 
+    /* -- scrollbar helpers -------------------------------------------------- */
+
+    float scrollbar_width() const { return 12.f; }
+
+    float text_inner_w() const {
+        float iw = inner_w();
+        if (scrollbar_enabled) iw -= scrollbar_width();
+        return std::max(0.f, iw);
+    }
+
+    bool is_scrollbar_visible() const {
+        return scrollbar_enabled && content_height_ > inner_h();
+    }
+
+    float get_max_scroll() const {
+        return std::max(0.f, content_height_ - inner_h());
+    }
+
+    float thumb_height() const;
+    float thumb_y() const;
+    bool is_in_scrollbar(float mx, float my) const;
+
+    void clamp_scroll();
+    void ensure_caret_visible();
+
     /**
-     * @brief Build a DWriteTextLayout for the current content at @p max_w.
+     * @brief Build a DWriteTextLayout for the current content at @p max_w / @p max_h.
      * Uses CORE.canvas.make_text_layout() so layout creation is routed through
      * the same abstraction as all other GPU factory calls.
      */
-    ComPtr<IDWriteTextLayout> make_layout(float max_w) const;
+    ComPtr<IDWriteTextLayout> make_layout(float max_w, float max_h = 1e6f) const;
 
     /**
      * @brief Render selection highlight rectangles behind the text.
      * Called from draw() before DrawText.  No-op when has_selection() is false.
      * All rendering goes through canvas.
+     * @param y_offset  Vertical scroll offset to apply to all hit-test metrics.
      */
-    void draw_selection(const ComPtr<IDWriteTextLayout>& layout, Canvas& canvas) const;
+    void draw_selection(const ComPtr<IDWriteTextLayout>& layout, Canvas& canvas, float y_offset = 0.f) const;
 };
 
 } // namespace lintel

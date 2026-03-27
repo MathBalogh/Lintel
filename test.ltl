@@ -1,9 +1,8 @@
 
-style card:
-	border-radius = 15
-	background-color = #FF0000
-	margin = 10
-
 root:
-	node "cont":
-		background-color = #000000
+	text "txt":
+		editable = true
+		scrollbar = true
+		border-weight = 1
+		border-color = #FF0000
+		height = 100

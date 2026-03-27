@@ -88,6 +88,8 @@ enum : uint32_t {
     Wrap,           // bool
     TextAlign,      // float (cast of TextAlign enum)
     Editable,       // bool
+    VerticalCenter, // bool
+    Scrollbar,      // bool
 
     GridColor,      // Color
     GridWeight,     // float

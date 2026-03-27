@@ -105,6 +105,9 @@
     <ClCompile Include="visitor.cpp">
       <Filter>lib\stylesheet\load</Filter>
     </ClCompile>
+    <ClCompile Include="stylesheet.cpp">
+      <Filter>lib\api</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="core.h">
@@ -155,9 +158,12 @@
     <ClInclude Include="include.h">
       <Filter>lib</Filter>
     </ClInclude>
+    <ClInclude Include="stylesheet.h">
+      <Filter>lib\api</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="main.ltl">
+    <None Include="ui.ltl">
       <Filter>src</Filter>
     </None>
     <None Include="language.md">

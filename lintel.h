@@ -2,6 +2,7 @@
 
 #include "handle.h"
 #include "types.h"
+#include "stylesheet.h"
 
 namespace lintel {
 
@@ -127,10 +128,35 @@ public:
 };
 
 // ---------------------------------------------------------------------------
+// LoadResult
+// ---------------------------------------------------------------------------
+//
+// Returned by load().  The root node contains the full scene sub-tree;
+// the stylesheet holds all named styles from the file so they can be applied
+// to dynamically created nodes after load() returns.
+//
+// Typical usage:
+//
+//     auto [subtree, sheet] = load("ui.lt");
+//     CORE.root.push(std::move(subtree));
+//
+//     // Dynamically create a node that inherits the file's styles:
+//     auto& btn = someParent.push();
+//     sheet.apply(btn, "button");
+
+struct LoadResult {
+    Node        root;
+    StyleSheet  sheet;
+
+    // Structured-bindings support (C++17 tie-breaking).
+    // Usage: auto [root, sheet] = load("ui.lt");
+};
+
+// ---------------------------------------------------------------------------
 // Query
 // ---------------------------------------------------------------------------
 
-Node&       root();
+Node& root();
 
 float       mouse_x();
 float       mouse_y();
@@ -142,7 +168,10 @@ wchar_t     key_char();
 float       scroll_dx();
 float       scroll_dy();
 
-Node        load(const char* path_to_file);
+// Returns a LoadResult.  The caller owns both the scene sub-tree and the
+// StyleSheet.
+LoadResult  load(const char* path_to_file);
+
 WeakNode    find(const char* name);
 
 template<typename T>

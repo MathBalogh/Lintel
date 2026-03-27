@@ -1,11 +1,12 @@
 #pragma once
 
-#include "core.h"   // pulls in lintel.h (Prop, Attributes, etc.) via the chain
+#include "core.h"   // → lintel.h → types.h
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <limits>
+#include <variant>
 #include <vector>
 
 namespace lintel {
@@ -21,15 +22,16 @@ inline float nan_f() { return std::numeric_limits<float>::quiet_NaN(); }
 // Tween — one in-flight interpolation
 // ---------------------------------------------------------------------------
 //
-// Created by INode::animate_prop when an event delta fires on a prop that has
-// a TransitionSpec.  Destroyed automatically when elapsed >= duration.
-//
-// range holds either {from,to} floats or {from,to} Colors so both value
-// types are handled without virtual dispatch.
-//
+// Unchanged from before except that 'range' can no longer hold an
+// AnimateDescriptor: that type has been removed from PropValue and the
+// per-call duration/easing override is now a separate animate_prop overload.
+
 struct Tween {
     Property prop = 0;
+
+    // Holds either {from,to} floats or {from,to} Colors.
     std::variant<std::pair<float, float>, std::pair<Color, Color>> range;
+
     float  elapsed = 0.f;
     float  duration = 0.15f;
     Easing easing = Easing::EaseOut;
@@ -38,35 +40,13 @@ struct Tween {
 // ---------------------------------------------------------------------------
 // INode — internal node implementation
 // ---------------------------------------------------------------------------
-//
-// LayoutProps has been removed.  Every layout-affecting parameter is now read
-// from INode::attr via the Prop enum (Prop::Width, Prop::PaddingTop, …).
-// Accessor methods below provide typed wrappers with sensible defaults:
-//
-//   layout_width()    → Prop::Width,  default nan_f() (auto)
-//   layout_height()   → Prop::Height, default nan_f() (auto)
-//   layout_padding()  → Prop::Padding{Top,Right,Bottom,Left}, default 0
-//   layout_margin()   → Prop::Margin{Top,Right,Bottom,Left},  default 0
-//   layout_gap()      → Prop::Gap,    default 0
-//   layout_share()    → Prop::Share,  default 1
-//   layout_direction()→ Prop::Direction, default Direction::Column
-//   layout_align()    → Prop::AlignItems,  default Align::Stretch
-//   layout_justify()  → Prop::JustifyItems, default Justify::Start
-//
-// The public Node fluent setters (width(), padding(), …) call attr.set() with
-// the appropriate Prop key so the parser and programmatic API share one path.
-//
-// layout_dirty lives inside Attributes and is set automatically by attr.set()
-// whenever a box-model or layout-behavior property changes.  measure() checks
-// and clears it; if the flag is clear and the available space matches the
-// cached values from the previous frame the entire measure sub-tree is skipped.
-//
+
 class INode {
 public:
     virtual ~INode() = default;
 
     virtual void apply_notifier(Property p) {}
-    void apply(Property p, AttribValue val);
+    void apply(Property p, PropValue val);
 
     // -- Handler storage -------------------------------------------------
 
@@ -89,50 +69,42 @@ public:
     bool draggable_flag = false;
     bool mouse_inside = false;
 
-    // -- Layout cache (used by measure's early-exit guard) ----------------
-    //
-    // Stores the avail_w / avail_h values passed to the previous successful
-    // measure call.  If attr.layout_dirty is false, no active tweens are
-    // running, and the available space matches, measure() returns immediately.
-    //
+    // -- Layout cache -----------------------------------------------------
+
     float cached_avail_w_ = -1.f;
     float cached_avail_h_ = -1.f;
 
-    // -- Animation ---------------------------------------------------------
-    //
-    // transitions_: keyed by Prop uint32_t; set once at tree-build time via
-    //   the "transition = <prop> <duration> <easing>" document directive.
-    //
-    // tweens_: live in-flight interpolations.  Created by animate_prop();
-    //   advanced by tick_tweens() each frame; erased when complete.
-    //
-    // has_active_tweens_: true while tweens_ is non-empty; lets measure()'s
-    //   early-exit guard skip the dirty-flag fast path when animating.
-    //
+    // -- Animation --------------------------------------------------------
+
     std::unordered_map<Property, TransitionSpec> transitions_;
     std::vector<Tween>                           tweens_;
     bool                                         has_active_tweens_ = false;
 
-    /**
-     * @brief Set or animate prop toward target.
-     *
-     * If transitions_ contains a spec for prop, a Tween is created (or the
-     * existing one is restarted from the current live value) and the prop will
-     * be interpolated each frame until complete.  Otherwise the value is
-     * applied immediately via attr.set().
-     *
-     * An AnimateDescriptor in target overrides the node-level TransitionSpec
-     * for this one call.
-     */
-    void animate_prop(Property p, const AttribValue& target);
+    // ── animate_prop — primary overload ──────────────────────────────────
+    //
+    // If transitions_ contains a spec for prop, a Tween is created (or the
+    // existing one restarted from the current live value).  Otherwise the
+    // value is snapped immediately via apply().
+    //
+    // PropValue replaces AttribValue here.  AnimateDescriptor is gone from
+    // the variant; use the second overload below when a per-call duration or
+    // easing override is needed.
 
-    /**
-     * @brief Advance all active tweens by dt seconds; recurse into children.
-     * Called once per frame by Core::process_default before the layout pass.
-     */
+    void animate_prop(Property p, const PropValue& target);
+
+    // ── animate_prop — per-call duration / easing override ───────────────
+    //
+    // Equivalent to the old AnimateDescriptor path.  Preferable for
+    // programmatic callers that know the easing at the call site.
+
+    void animate_prop(Property p, float  target, float duration, Easing easing);
+    void animate_prop(Property p, Color  target, float duration, Easing easing);
+
+    // ── tick_tweens ──────────────────────────────────────────────────────
+
     void tick_tweens(float dt);
 
-    // ── Layout accessors — read Prop values from attr ───────────────────
+    // ── Layout accessors — read PropValue from attr ───────────────────────
 
     float     layout_width()     const;
     float     layout_height()    const;
@@ -203,6 +175,10 @@ private:
     float  resolve_cross_y(INode* child, float inner_height);
 
     static void collect_focusable(INode* node, std::vector<INode*>& out);
+
+    // Shared implementation for all animate_prop overloads.
+    void animate_prop_impl(Property p, float target, float duration, Easing easing);
+    void animate_prop_impl(Property p, Color  target, float duration, Easing easing);
 };
 
 template class Impl<INode>;
@@ -215,7 +191,7 @@ inline void fire_with_context(
     INode* impl, WeakNode handle,
     Event type, float local_x, float local_y,
     MouseButton btn, Modifiers mods,
-    float scroll_dx = 0.0f, float scroll_dy = 0.0f) {
+    float scroll_dx = 0.f, float scroll_dy = 0.f) {
     InputState& inp = CORE.input;
     inp.mouse_x = local_x;
     inp.mouse_y = local_y;
@@ -226,7 +202,6 @@ inline void fire_with_context(
     inp.key_vkey = 0;
     inp.key_repeat = false;
     inp.key_char = L'\0';
-
     impl->invoke_handlers(handle, type);
     impl->invoke_handlers(handle, Event::Any);
 }
@@ -241,7 +216,6 @@ inline void fire_key_context(
     inp.modifiers = mods;
     inp.scroll_dx = 0.f;
     inp.scroll_dy = 0.f;
-
     impl->invoke_handlers(handle, type);
     impl->invoke_handlers(handle, Event::Any);
 }
@@ -256,7 +230,6 @@ inline void fire_char_context(
     inp.modifiers = mods;
     inp.scroll_dx = 0.f;
     inp.scroll_dy = 0.f;
-
     impl->invoke_handlers(handle, Event::Char);
     impl->invoke_handlers(handle, Event::Any);
 }

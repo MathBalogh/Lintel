@@ -143,6 +143,7 @@
     <ClCompile Include="load.cpp" />
     <ClCompile Include="parser.cpp" />
     <ClCompile Include="parser.h" />
+    <ClCompile Include="stylesheet.cpp" />
     <ClCompile Include="visitor.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -160,12 +161,13 @@
     <ClInclude Include="iwindow.h" />
     <ClInclude Include="lexer.h" />
     <ClInclude Include="lintel.h" />
+    <ClInclude Include="stylesheet.h" />
     <ClInclude Include="types.h" />
     <ClInclude Include="visitor.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="language.md" />
-    <None Include="main.ltl" />
+    <None Include="ui.ltl" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="image.jpg" />

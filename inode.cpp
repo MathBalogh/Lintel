@@ -5,11 +5,6 @@
 
 namespace lintel {
 
-void INode::apply(Property p, AttribValue val) {
-    attr.set(p, val);
-    apply_notifier(p);
-}
-
 // ===========================================================================
 // Layout accessors — read from attr with typed defaults
 // ===========================================================================
@@ -479,146 +474,6 @@ void INode::draw_default(Canvas& canvas) {
 }
 
 // ===========================================================================
-// Animation — tick_tweens, ease, animate_property::
-// ===========================================================================
-
-static float ease(float t, Easing e) noexcept {
-    t = (t < 0.f) ? 0.f : (t > 1.f) ? 1.f : t;
-    switch (e) {
-        case Easing::EaseIn:    return t * t;
-        case Easing::EaseOut:   return t * (2.f - t);
-        case Easing::EaseInOut: return t < 0.5f ? 2.f * t * t : -1.f + (4.f - 2.f * t) * t;
-        case Easing::Spring:
-        {
-            // Critically-damped spring: slight overshoot, then settles.
-            // exp(-6t)*cos(8t) approximation; avoid for colour property::s.
-            const float e6 = std::exp(-6.f * t);
-            const float c8 = std::cos(8.f * t);
-            return 1.f - e6 * c8;
-        }
-        default: return t; // Linear
-    }
-}
-
-void INode::tick_tweens(float dt) {
-    has_active_tweens_ = false;
-
-    for (auto it = tweens_.begin(); it != tweens_.end(); ) {
-        it->elapsed += dt;
-        const float raw_t = (it->duration > 0.f)
-            ? it->elapsed / it->duration : 1.f;
-        const bool  done = (raw_t >= 1.f);
-        const float t = ease(done ? 1.f : raw_t, it->easing);
-
-        // Write the interpolated value directly; bypass animate_property:: to avoid
-        // spawning a new tween and to suppress the layout_dirty dance for
-        // visual-only property::s.
-        if (auto* ff = std::get_if<std::pair<float, float>>(&it->range)) {
-            const float v = ff->first + (ff->second - ff->first) * t;
-            attr.set(it->prop, v);
-        }
-        else if (auto* cc = std::get_if<std::pair<Color, Color>>(&it->range)) {
-            const Color& a = cc->first;
-            const Color& b = cc->second;
-            attr.set(it->prop, Color(
-                a.r + (b.r - a.r) * t,
-                a.g + (b.g - a.g) * t,
-                a.b + (b.b - a.b) * t,
-                a.a + (b.a - a.a) * t));
-        }
-
-        if (done) {
-            it = tweens_.erase(it);
-        }
-        else {
-            has_active_tweens_ = true;
-            ++it;
-        }
-    }
-
-    for (Node& child : children) {
-        INode* ci = child.handle<INode>();
-        ci->tick_tweens(dt);
-        if (ci->has_active_tweens_) has_active_tweens_ = true;
-    }
-}
-
-void INode::animate_prop(Property p, const AttribValue& target) {
-    // Unwrap AnimateDescriptor if that's what arrived (from the animate() function).
-    const float* effective_float = nullptr;
-    const Color* effective_color = nullptr;
-    float         override_dur = -1.f;
-    Easing        override_ease = Easing::EaseOut;
-
-    if (const auto* ad = std::get_if<AnimateDescriptor>(&target)) {
-        effective_float = std::get_if<float>(&ad->target);
-        effective_color = std::get_if<Color>(&ad->target);
-        override_dur = ad->duration;
-        override_ease = ad->easing;
-    }
-    else {
-        effective_float = std::get_if<float>(&target);
-        effective_color = std::get_if<Color>(&target);
-    }
-
-    // Find the transition spec (node-level, or per-call override).
-    TransitionSpec spec;
-    bool has_spec = false;
-
-    if (override_dur >= 0.f) {
-        spec = { override_dur, override_ease };
-        has_spec = true;
-    }
-    else {
-        auto it = transitions_.find(static_cast<uint32_t>(p));
-        if (it != transitions_.end()) {
-            spec = it->second;
-            has_spec = true;
-        }
-    }
-
-    if (!has_spec) {
-        // No transition: snap immediately.
-        // Reconstruct a plain AttribValue from whatever we extracted.
-        if (effective_float) attr.set(p, *effective_float);
-        else if (effective_color) attr.set(p, *effective_color);
-        else                      attr.set(p, target); // bool / wstring
-        return;
-    }
-
-    // Cancel any existing tween for this property::.
-    tweens_.erase(std::remove_if(tweens_.begin(), tweens_.end(),
-                  [p] (const Tween& tw) { return tw.prop == p; }), tweens_.end());
-
-    // Build tween from current live value → target.
-    Tween tw;
-    tw.prop = p;
-    tw.elapsed = 0.f;
-    tw.duration = spec.duration;
-    tw.easing = spec.easing;
-
-    if (effective_float) {
-        // Fall back to 0.f, not *effective_float, so an unset property:: always
-        // starts its first tween from zero rather than snapping (from==to).
-        const float from = attr.get_or<float>(p, 0.f);
-        tw.range = std::pair<float, float>{ from, *effective_float };
-    }
-    else if (effective_color) {
-        // Fall back to transparent black for the same reason.
-        const Color from = attr.get_or<Color>(p, Color(0.f, 0.f, 0.f, 0.f));
-        tw.range = std::pair<Color, Color>{ from, *effective_color };
-    }
-    else {
-        // bool / wstring — not interpolable, snap.
-        attr.set(p, target);
-        return;
-    }
-
-    tweens_.push_back(std::move(tw));
-    has_active_tweens_ = true;
-}
-
-// ===========================================================================
 // Node — constructors / destructor / move
 // ===========================================================================
 
@@ -771,5 +626,172 @@ float* Node::margin_bottom() {
 Rect  Node::rect()    const { return iptr_->rect; }
 float Node::mouse_x() const { return CORE.input.mouse_screen_x - iptr_->content_x(); }
 float Node::mouse_y() const { return CORE.input.mouse_screen_y - iptr_->content_y(); }
+
+static float ease(float t, Easing e) noexcept {
+    t = (t < 0.f) ? 0.f : (t > 1.f) ? 1.f : t;
+    switch (e) {
+        case Easing::EaseIn:    return t * t;
+        case Easing::EaseOut:   return t * (2.f - t);
+        case Easing::EaseInOut: return t < 0.5f ? 2.f * t * t
+            : -1.f + (4.f - 2.f * t) * t;
+        case Easing::Spring:
+        {
+            const float e6 = std::exp(-6.f * t);
+            const float c8 = std::cos(8.f * t);
+            return 1.f - e6 * c8;
+        }
+        default: return t; // Linear
+    }
+}
+
+// ---------------------------------------------------------------------------
+// animate_prop_impl — shared tween construction
+// ---------------------------------------------------------------------------
+//
+// Finds or creates the TransitionSpec, cancels any existing tween for the
+// property, and pushes a new Tween onto the node's list.
+//
+// The 'duration' parameter takes precedence over any node-level transition
+// spec; pass -1.f to use the node-level spec (or snap if none).
+
+void INode::animate_prop_impl(Property p, float target,
+                              float duration, Easing easing) {
+    // Cancel any existing tween for this property.
+    tweens_.erase(std::remove_if(tweens_.begin(), tweens_.end(),
+                  [p] (const Tween& tw) { return tw.prop == p; }), tweens_.end());
+
+    Tween tw;
+    tw.prop = p;
+    tw.elapsed = 0.f;
+    tw.duration = duration;
+    tw.easing = easing;
+
+    const float from = attr.get_or<float>(p, 0.f);
+    tw.range = std::pair<float, float>{ from, target };
+
+    tweens_.push_back(std::move(tw));
+    has_active_tweens_ = true;
+}
+
+void INode::animate_prop_impl(Property p, Color target,
+                              float duration, Easing easing) {
+    tweens_.erase(std::remove_if(tweens_.begin(), tweens_.end(),
+                  [p] (const Tween& tw) { return tw.prop == p; }), tweens_.end());
+
+    Tween tw;
+    tw.prop = p;
+    tw.elapsed = 0.f;
+    tw.duration = duration;
+    tw.easing = easing;
+
+    const Color from = attr.get_or<Color>(p, Color(0.f, 0.f, 0.f, 0.f));
+    tw.range = std::pair<Color, Color>{ from, target };
+
+    tweens_.push_back(std::move(tw));
+    has_active_tweens_ = true;
+}
+
+// ---------------------------------------------------------------------------
+// animate_prop — primary overload (PropValue target, node-level spec)
+// ---------------------------------------------------------------------------
+
+void INode::animate_prop(Property p, const PropValue& target) {
+    const float* fp = std::get_if<float>(&target);
+    const Color* cp = std::get_if<Color>(&target);
+
+    // Non-interpolable types (bool, wstring): snap immediately.
+    if (!fp && !cp) {
+        attr.set(p, target);
+        return;
+    }
+
+    // Look up node-level transition spec.
+    auto spec_it = transitions_.find(p);
+    if (spec_it == transitions_.end()) {
+        // No spec: snap.
+        attr.set(p, target);
+        return;
+    }
+
+    const TransitionSpec& spec = spec_it->second;
+
+    if (fp) animate_prop_impl(p, *fp, spec.duration, spec.easing);
+    else    animate_prop_impl(p, *cp, spec.duration, spec.easing);
+}
+
+// ---------------------------------------------------------------------------
+// animate_prop — per-call duration / easing overloads
+// ---------------------------------------------------------------------------
+//
+// These replace the old AnimateDescriptor path.  Use them when the animation
+// parameters are determined at the call site rather than being declared in the
+// .lintel file's transition block.
+//
+// Example:
+//   impl->animate_prop(property::BackgroundColor,
+//                      Color(0.2f, 0.6f, 1.f, 1.f),
+//                      0.3f, Easing::Spring);
+
+void INode::animate_prop(Property p, float target,
+                         float duration, Easing easing) {
+    animate_prop_impl(p, target, duration, easing);
+}
+
+void INode::animate_prop(Property p, Color target,
+                         float duration, Easing easing) {
+    animate_prop_impl(p, target, duration, easing);
+}
+
+// ---------------------------------------------------------------------------
+// tick_tweens — unchanged except PropValue is used in attr.set() calls
+// ---------------------------------------------------------------------------
+
+void INode::tick_tweens(float dt) {
+    has_active_tweens_ = false;
+
+    for (auto it = tweens_.begin(); it != tweens_.end(); ) {
+        it->elapsed += dt;
+        const float raw_t = (it->duration > 0.f)
+            ? it->elapsed / it->duration : 1.f;
+        const bool  done = (raw_t >= 1.f);
+        const float t = ease(done ? 1.f : raw_t, it->easing);
+
+        if (auto* ff = std::get_if<std::pair<float, float>>(&it->range)) {
+            const float v = ff->first + (ff->second - ff->first) * t;
+            attr.set(it->prop, v);   // PropValue constructed from float
+        }
+        else if (auto* cc = std::get_if<std::pair<Color, Color>>(&it->range)) {
+            const Color& a = cc->first;
+            const Color& b = cc->second;
+            attr.set(it->prop, Color(
+                a.r + (b.r - a.r) * t,
+                a.g + (b.g - a.g) * t,
+                a.b + (b.b - a.b) * t,
+                a.a + (b.a - a.a) * t));
+        }
+
+        if (done)
+            it = tweens_.erase(it);
+        else {
+            has_active_tweens_ = true;
+            ++it;
+        }
+    }
+
+    for (Node& child : children) {
+        INode* ci = child.handle<INode>();
+        ci->tick_tweens(dt);
+        if (ci->has_active_tweens_) has_active_tweens_ = true;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// apply — snap write, fires apply_notifier
+// ---------------------------------------------------------------------------
+
+void INode::apply(Property p, PropValue val) {
+    attr.set(p, val);
+    apply_notifier(p);
+}
 
 } // namespace lintel

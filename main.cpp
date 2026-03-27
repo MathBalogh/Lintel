@@ -6,7 +6,8 @@ using namespace lintel;
 int main() {
 	Window window;
 	
-	root() = load("main.ltl");
+	auto [subtree, sheet] = load("./ui.ltl");
+	root() = std::move(subtree);
 
 	return window.run();
 }

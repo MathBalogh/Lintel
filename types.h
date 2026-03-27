@@ -14,61 +14,95 @@ namespace lintel {
 
 using Property = uint32_t;
 
+// ---------------------------------------------------------------------------
+// Property IDs
+// ---------------------------------------------------------------------------
+//
+// Layout is critical to memory size.  The property IDs are deliberately ordered
+// so that Attributes can use two compact typed arrays instead of one giant
+// std::variant array:
+//
+//   Hot floats  [ 1,  k_hot_float_end )  ← 18 properties × 4 B  =  72 B
+//   Hot colors  [ k_hot_float_end, k_hot_end )  ← 3 × 16 B      =  48 B
+//   Cold (map)  [ k_hot_end, … )         ← strings, bools, rare floats
+//
+// Total hot storage: 72 + 48 + masks + dirty flag ≈ 130 B.
+// Previous layout (array of std::variant<…wstring…>): 23 × 40 = 920 B.
+//
+// Rule: is_layout_prop(p) is true for the Width…JustifyItems range only.
+// Changing a color or string no longer spuriously marks layout dirty.
+
 namespace property {
 
 enum : uint32_t {
-    Null,
 
-    BackgroundColor,
-    BorderColor,
-    BorderWeight,
-    CornerRadius,
-    TextColor,
-    FontSize,
-    FontFamily,
+    Null = 0,
 
-    Width,
-    Height,
-    PaddingTop,
-    PaddingRight,
-    PaddingBottom,
-    PaddingLeft,
-    MarginTop,
-    MarginRight,
-    MarginBottom,
-    MarginLeft,
-    Gap,
-    Share,
+    // ── Hot floats [1, k_hot_float_end) ─────────────────────────────────
+    // Stored in Attributes::hot_f_[p - 1].  All are plain float or
+    // enum-cast-to-float.  Keep this block contiguous; do not insert
+    // non-float properties inside it.
 
-    Direction,
-    AlignItems,
-    JustifyItems,
+    BorderWeight = 1,   // float
+    CornerRadius,       // float
 
-    k_hot_count,
+    FontSize,           // float  (moved before layout props deliberately —
+    //         not a layout prop, but very commonly set)
 
-    // Text
-    Bold,
-    Italic,
-    Wrap,
-    TextAlign,
-    Editable,
+// Box-model: is_layout_prop() covers Width … JustifyItems.
+Width,              // float, NaN = auto
+Height,             // float, NaN = auto
+PaddingTop,         // float
+PaddingRight,       // float
+PaddingBottom,      // float
+PaddingLeft,        // float
+MarginTop,          // float
+MarginRight,        // float
+MarginBottom,       // float
+MarginLeft,         // float
+Gap,                // float
+Share,              // float  (flex share weight)
+Direction,          // float (cast of Direction enum)
+AlignItems,         // float (cast of Align enum)
+JustifyItems,       // float (cast of Justify enum)
 
-    // Graph / chart
-    GridColor,
-    GridWeight,
-    LabelColor,
-    LabelFontSize,
+k_hot_float_end,    // ← sentinel; value = 19
 
-    // Misc
-    Opacity,
+// ── Hot colors [k_hot_float_end, k_hot_end) ─────────────────────────
+// Stored in Attributes::hot_c_[p - k_hot_float_end].
+
+BackgroundColor = k_hot_float_end,  // Color
+BorderColor,                        // Color
+TextColor,                          // Color
+
+k_hot_end,          // ← sentinel; value = 22
+
+// ── Cold properties [k_hot_end, …) ──────────────────────────────────
+// Stored in Attributes::cold_ (unordered_map) — allocated only when set.
+// Strings, bools, and less-frequently-touched props belong here.
+
+FontFamily = k_hot_end,  // std::wstring
+
+Bold,           // bool
+Italic,         // bool
+Wrap,           // bool
+TextAlign,      // float (cast of TextAlign enum)
+Editable,       // bool
+
+GridColor,      // Color
+GridWeight,     // float
+LabelColor,     // Color
+LabelFontSize,  // float
+
+Opacity,        // float
 };
 
-}
+} // namespace property
 
-// Returns true for properties that belong to the box-model or layout-behavior
-// categories.  Attributes::set() sets layout_dirty when this returns true.
+// True for the box-model / flex props that affect layout geometry.
+// Attributes::set() sets layout_dirty when this returns true.
 inline bool is_layout_prop(uint32_t p) noexcept {
-    return p < property::k_hot_count;
+    return p >= property::Width && p <= property::JustifyItems;
 }
 
 // ---------------------------------------------------------------------------
@@ -77,10 +111,10 @@ inline bool is_layout_prop(uint32_t p) noexcept {
 
 enum class Easing {
     Linear,
-    EaseIn,    // Quadratic acceleration.
-    EaseOut,   // Quadratic deceleration (default for UI transitions).
-    EaseInOut, // Symmetric S-curve.
-    Spring,    // Critically-damped overshoot; best for spatial movement.
+    EaseIn,
+    EaseOut,
+    EaseInOut,
+    Spring,
 };
 
 // ---------------------------------------------------------------------------
@@ -111,13 +145,18 @@ struct Color {
 
     static Color black() noexcept { return { 0.f, 0.f, 0.f, 1.f }; }
     static Color white() noexcept { return { 1.f, 1.f, 1.f, 1.f }; }
-
     static Color lighten(const Color& o, float f) noexcept;
 };
 
 // ---------------------------------------------------------------------------
 // AnimateDescriptor
 // ---------------------------------------------------------------------------
+//
+// Kept as a standalone struct for future use by an animate() API.
+// Removed from PropValue — passing animation overrides through the attribute
+// map was the wrong abstraction: it inflated every stored value and made the
+// hot array unnecessarily large.  Per-call overrides are now passed as
+// separate arguments to INode::animate_prop().
 
 struct AnimateDescriptor {
     std::variant<float, Color> target;
@@ -126,52 +165,115 @@ struct AnimateDescriptor {
 };
 
 // ---------------------------------------------------------------------------
+// PropValue  (was AttribValue)
+// ---------------------------------------------------------------------------
+//
+// The value type stored in Attributes and StyleSheet.
+// AnimateDescriptor is no longer a variant member — it lived here only to
+// support the (still-commented-out) animate() value function, and its 24-byte
+// footprint was the single largest contributor to Attributes bloat.
+//
+// AttribValue is kept as an alias so callers written against the old name
+// continue to compile without modification.
+
+using PropValue = std::variant<float, Color, bool, std::wstring>;
+using AttribValue = PropValue;   // backward-compat alias
+
+// ---------------------------------------------------------------------------
 // Attributes
 // ---------------------------------------------------------------------------
+//
+// Per-node property bag with two-tier hot storage:
+//
+//   Tier 1 — hot floats:  float hot_f_[18]   +  uint32_t bitmask   = 76 B
+//   Tier 2 — hot colors:  Color hot_c_[3]    +  uint8_t  bitmask   = 49 B
+//   Tier 3 — cold map:    unordered_map (heap-allocated only when used)
+//
+// Total object size (cold map empty) ≈ 130 B vs the previous 920 B.
+//
+// API surface is unchanged from the caller's perspective.
 
-using AttribValue = std::variant<
-    float,
-    Color,
-    bool,
-    std::wstring,
-    AnimateDescriptor // per-event animation override; created by animate()
->;
-
-static constexpr uint32_t k_hot_count = static_cast<uint32_t>(property::k_hot_count);
+namespace detail {
+static constexpr uint32_t k_hot_float_first = 1u;
+static constexpr uint32_t k_hot_float_count =
+property::k_hot_float_end - k_hot_float_first;   // 18
+static constexpr uint32_t k_hot_color_first = property::k_hot_float_end; // 19
+static constexpr uint32_t k_hot_color_count =
+property::k_hot_end - property::k_hot_float_end; // 3
+static_assert(k_hot_float_count <= 32, "hot_f_mask_ must be uint32_t");
+static_assert(k_hot_color_count <= 8, "hot_c_mask_ must be uint8_t");
+} // namespace detail
 
 class Attributes {
-    // Hot storage: array of variants + populated bitset.
-    // Default-constructed AttribValue holds float(0.f) (first variant type).
-    std::array<AttribValue, k_hot_count> hot_;
-    std::bitset<k_hot_count>             hot_set_;
+    // ── Hot float storage ────────────────────────────────────────────────
+    float    hot_f_[detail::k_hot_float_count] = {};
+    uint32_t hot_f_mask_ = 0; // bit i = hot_f_[i] has been set
 
-    // Cold storage: map from Prop integer to value.
-    std::unordered_map<uint32_t, AttribValue> cold_;
+    // ── Hot color storage ────────────────────────────────────────────────
+    Color   hot_c_[detail::k_hot_color_count] = {};
+    uint8_t hot_c_mask_ = 0;  // bit i = hot_c_[i] has been set
+
+    // ── Cold storage ─────────────────────────────────────────────────────
+    std::unordered_map<uint32_t, PropValue> cold_;
+
+    // ── Internal routing helpers ─────────────────────────────────────────
+
+    bool in_hot_float(uint32_t idx) const noexcept {
+        return idx >= detail::k_hot_float_first &&
+            idx < property::k_hot_float_end;
+    }
+    bool in_hot_color(uint32_t idx) const noexcept {
+        return idx >= detail::k_hot_color_first &&
+            idx < property::k_hot_end;
+    }
 
 public:
-    // True after any box-model or layout-behavior prop is set.
+    // True after any layout-affecting property is written.
     // Read and cleared by INode::measure().
     bool layout_dirty = true;
 
-    // ── Mutation ─────────────────────────────────────────────────────────
+    // ── Mutation ──────────────────────────────────────────────────────────
 
-    Attributes& set(Property p, AttribValue value) {
+    Attributes& set(Property p, PropValue value) {
         const uint32_t idx = static_cast<uint32_t>(p);
-        if (idx < k_hot_count) {
-            hot_[idx] = std::move(value);
-            hot_set_.set(idx);
+
+        if (in_hot_float(idx)) {
+            // Only float values belong in the float slots; any other type
+            // (e.g. a Color written to a float property) goes to cold so the
+            // type error is visible rather than silently dropped.
+            if (const float* f = std::get_if<float>(&value)) {
+                hot_f_[idx - detail::k_hot_float_first] = *f;
+                hot_f_mask_ |= 1u << (idx - detail::k_hot_float_first);
+            }
+            else {
+                cold_[idx] = std::move(value);
+            }
+        }
+        else if (in_hot_color(idx)) {
+            if (const Color* c = std::get_if<Color>(&value)) {
+                hot_c_[idx - detail::k_hot_color_first] = *c;
+                hot_c_mask_ |= 1u << (idx - detail::k_hot_color_first);
+            }
+            else {
+                cold_[idx] = std::move(value);
+            }
         }
         else {
             cold_[idx] = std::move(value);
         }
+
         if (is_layout_prop(p)) layout_dirty = true;
         return *this;
     }
 
     Attributes& unset(Property p) {
         const uint32_t idx = static_cast<uint32_t>(p);
-        if (idx < k_hot_count) hot_set_.reset(idx);
-        else                   cold_.erase(idx);
+        if (in_hot_float(idx))
+            hot_f_mask_ &= ~(1u << (idx - detail::k_hot_float_first));
+        else if (in_hot_color(idx))
+            hot_c_mask_ &= ~(1u << (idx - detail::k_hot_color_first));
+        else
+            cold_.erase(idx);
         return *this;
     }
 
@@ -179,60 +281,76 @@ public:
 
     bool has(Property p) const noexcept {
         const uint32_t idx = static_cast<uint32_t>(p);
-        if (idx < k_hot_count) return hot_set_.test(idx);
+        if (in_hot_float(idx))
+            return (hot_f_mask_ >> (idx - detail::k_hot_float_first)) & 1u;
+        if (in_hot_color(idx))
+            return (hot_c_mask_ >> (idx - detail::k_hot_color_first)) & 1u;
         return cold_.count(idx) != 0;
     }
 
+    // Returns a typed pointer into the stored value, or nullptr on miss/mismatch.
     template<typename T>
     const T* get(Property p) const {
-        const uint32_t idx = p;
-        if (idx < k_hot_count) {
-            if (!hot_set_.test(idx)) return nullptr;
-            return std::get_if<T>(&hot_[idx]);
-        }
-        auto it = cold_.find(idx);
-        return (it == cold_.end()) ? nullptr : std::get_if<T>(&it->second);
-    }
-
-    template<typename T>
-    T* get(uint32_t p) {
         const uint32_t idx = static_cast<uint32_t>(p);
-        if (idx < k_hot_count) {
-            if (!hot_set_.test(idx)) return nullptr;
-            return std::get_if<T>(&hot_[idx]);
+
+        if (in_hot_float(idx)) {
+            uint32_t slot = idx - detail::k_hot_float_first;
+            if (!((hot_f_mask_ >> slot) & 1u)) return nullptr;
+            // if constexpr: the dead branch is removed by the compiler.
+            if constexpr (std::is_same_v<T, float>)
+                return &hot_f_[slot];
+            return nullptr; // type mismatch for this slot
         }
+
+        if (in_hot_color(idx)) {
+            uint32_t slot = idx - detail::k_hot_color_first;
+            if (!((hot_c_mask_ >> slot) & 1u)) return nullptr;
+            if constexpr (std::is_same_v<T, Color>)
+                return &hot_c_[slot];
+            return nullptr;
+        }
+
+        // Cold path
         auto it = cold_.find(idx);
-        return (it == cold_.end()) ? nullptr : std::get_if<T>(&it->second);
+        if (it == cold_.end()) return nullptr;
+        return std::get_if<T>(&it->second);
+    }
+
+    // Non-const version needed by a few internal callers.
+    template<typename T>
+    T* get(Property p) {
+        return const_cast<T*>(std::as_const(*this).get<T>(p));
     }
 
     template<typename T>
-    T get_or(uint32_t p, const T& fallback) const {
+    T get_or(Property p, const T& fallback) const {
         if (const T* v = get<T>(p)) return *v;
         return fallback;
     }
 
-    // ── Live pointer for animation targets ───────────────────────────────
+    // ── Live pointer for animation targets ────────────────────────────────
     //
-    // Returns a stable pointer to a float-valued slot, initialising it to 0
-    // if not yet set.  Used by Node::margin_bottom() and similar escape
-    // hatches that hand a raw pointer to an animation system.
-    //
-    float* float_ref(uint32_t p) {
+    // Returns a stable pointer to a float slot (initialising it to 0 if not
+    // yet set).  Used by Node::margin_bottom() and similar escape hatches
+    // that hand a raw pointer to an external animation system.
+
+    float* float_ref(Property p) {
         const uint32_t idx = static_cast<uint32_t>(p);
-        if (idx < k_hot_count) {
-            if (!hot_set_.test(idx)) {
-                hot_[idx] = 0.f;
-                hot_set_.set(idx);
-            }
-            return std::get_if<float>(&hot_[idx]);
+        if (in_hot_float(idx)) {
+            uint32_t slot = idx - detail::k_hot_float_first;
+            hot_f_mask_ |= 1u << slot;
+            return &hot_f_[slot];
         }
-        // Cold path: emplace if absent, then return pointer.
-        auto [it, inserted] = cold_.emplace(idx, 0.f);
-        if (!inserted && !std::holds_alternative<float>(it->second))
-            it->second = 0.f;
-        return std::get_if<float>(&it->second);
+        // Cold: emplace 0.f if absent or wrong type.
+        auto& entry = cold_[idx];
+        if (!std::holds_alternative<float>(entry)) entry = 0.f;
+        return std::get_if<float>(&entry);
     }
 };
+
+// ---------------------------------------------------------------------------
+// Geometric helpers
+// ---------------------------------------------------------------------------
 
 struct Rect {
     float x, y, w, h;
@@ -247,7 +365,6 @@ struct Edges {
     Edges() noexcept;
     Edges(float all) noexcept;
     Edges(float x_axis, float y_axis) noexcept;
-    // Individual-side constructor used by layout accessors.
     Edges(float top_, float right_, float bottom_, float left_) noexcept
         : top(top_), right(right_), bottom(bottom_), left(left_) {}
 
@@ -255,73 +372,32 @@ struct Edges {
     float vertical()   const; // top  + bottom
 };
 
-enum class Direction {
-    Row,    // Children laid out left to right.
-    Column, // Children laid out top to bottom (default).
-};
-
-enum class Align {
-    Start,   // Leading cross-axis edge.
-    Center,  // Centred on the cross axis.
-    End,     // Trailing cross-axis edge.
-    Stretch, // Fill the cross axis (default).
-};
-
-enum class Justify {
-    Start,        // Pack at the main-axis start (default).
-    Center,       // Centre along the main axis.
-    End,          // Pack at the main-axis end.
-    SpaceBetween, // Free space between children.
-    SpaceAround,  // Free space around each child.
-};
-
 // ---------------------------------------------------------------------------
-// Text alignment
+// Enumerations
 // ---------------------------------------------------------------------------
 
-enum class TextAlign {
-    Left,
-    Center,
-    Right,
-    Justify,
-};
+enum class Direction { Row, Column };
+enum class Align { Start, Center, End, Stretch };
+enum class Justify { Start, Center, End, SpaceBetween, SpaceAround };
+enum class TextAlign { Left, Center, Right, Justify };
 
-// ---------------------------------------------------------------------------
-// Input types
-// ---------------------------------------------------------------------------
-
-enum class MouseButton {
-    None,
-    Left,
-    Right,
-    Middle
-};
+enum class MouseButton { None, Left, Right, Middle };
 
 struct Modifiers {
     bool shift = false;
-    bool ctrl  = false;
-    bool alt   = false;
+    bool ctrl = false;
+    bool alt = false;
 };
-
-// ---------------------------------------------------------------------------
-// Event enumeration
-// ---------------------------------------------------------------------------
 
 enum class Event {
     Null,
-    // Pointer
     MouseEnter, MouseLeave, MouseMove,
     MouseDown, MouseUp,
     Click, DoubleClick, RightClick,
     Scroll,
-    // Focus
-    Focus,
-    Blur,
-    // Keyboard
+    Focus, Blur,
     KeyDown, KeyUp, Char,
-    // Drag
     DragStart, Drag, DragEnd,
-    // Wildcard
     Any
 };
 

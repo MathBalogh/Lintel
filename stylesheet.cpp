@@ -5,9 +5,9 @@
 // This file is the new home for all prop-dispatch logic.  Previously this
 // lived in three almost-identical forms inside load.cpp:
 //
-//   • apply_one_prop()       — snap application during tree build
-//   • animate_one_prop()     — animated application during event dispatch
-//   • resolve_props()        — conversion of AST nodes → ResolvedProps
+//   • apply_one_prop()       - snap application during tree build
+//   • animate_one_prop()     - animated application during event dispatch
+//   • resolve_props()        - conversion of AST nodes → ResolvedProps
 //
 // All three collapsed into StyleSheet::dispatch_prop() with a Mode parameter.
 // The ~120 lines of duplicated dispatch are now ~60 lines that both load() and
@@ -76,7 +76,7 @@ static Edges parse_edges(const PropValue& raw) {
         if (vals.size() == 2) return Edges(vals[0], vals[1]);
         if (vals.size() == 4) return Edges(vals[0], vals[1], vals[2], vals[3]);
         std::cerr << "stylesheet: padding/margin expects 1, 2 or 4 values, got "
-            << vals.size() << " — defaulting to 0\n";
+            << vals.size() << " - defaulting to 0\n";
     }
     return Edges(0.f);
 }
@@ -103,7 +103,7 @@ static void install_transition(Node& n, const std::wstring& spec_w) {
     Property prop = FRAMEWORK.get_property(std::string(tokens[0]));
     if (prop == 0) {
         std::cerr << "stylesheet: unknown property '" << tokens[0]
-            << "' in transition spec — skipped\n";
+            << "' in transition spec - skipped\n";
         return;
     }
 
@@ -245,7 +245,7 @@ void StyleSheet::dispatch_prop(Node& n, std::string_view key,
 
     Property p = FRAMEWORK.get_property(std::string(key));
     if (p == 0) {
-        std::cerr << "stylesheet: unknown property '" << key << "' — skipped\n";
+        std::cerr << "stylesheet: unknown property '" << key << "' - skipped\n";
         return;
     }
 
@@ -290,7 +290,7 @@ void StyleSheet::animate(Node& n, const std::vector<Prop>& deltas) {
 void StyleSheet::apply(Node& n, std::string_view style_name) const {
     auto it = styles_.find(std::string(style_name));
     if (it == styles_.end()) {
-        std::cerr << "stylesheet: undefined style '" << style_name << "' — skipped\n";
+        std::cerr << "stylesheet: undefined style '" << style_name << "' - skipped\n";
         return;
     }
     const Style& s = it->second;

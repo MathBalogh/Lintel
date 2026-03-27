@@ -165,7 +165,7 @@ public:
 };
 
 // ---------------------------------------------------------------------------
-// Fire helpers — forward declarations
+// Fire helpers - forward declarations
 // ---------------------------------------------------------------------------
 //
 // INode is an incomplete type at this point in the translation unit.

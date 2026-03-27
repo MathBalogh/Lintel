@@ -137,7 +137,7 @@ public:
         const unsigned int new_w = client_width();
         const unsigned int new_h = client_height();
 
-        // Zero dimensions occur when the window is minimised — nothing to do.
+        // Zero dimensions occur when the window is minimised - nothing to do.
         if (new_w == 0 || new_h == 0) return true;
 
         // Skip if the size hasn't actually changed.
@@ -152,7 +152,7 @@ public:
     }
 };
 
-// Explicit instantiation — keeps Impl<IWindow> specialisation in this TU.
+// Explicit instantiation - keeps Impl<IWindow> specialisation in this TU.
 template class Impl<IWindow>;
 
 } // namespace lintel

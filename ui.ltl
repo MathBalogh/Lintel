@@ -33,7 +33,7 @@ style base-chip:
     align = center
     gap = 6
     padding = 4 10
-    corner-radius = 3
+    border-radius = 3
     focusable = true
     transition = background-color 0.1 ease-out
     transition = border-color 0.1 ease-out
@@ -42,6 +42,7 @@ style chip-active:
     apply base-chip
     background-color = #141720
     border-color = border-active
+    height = 20
     on mouse-enter:
         background-color = #1a2b24
         border-color = accent-green
@@ -73,7 +74,7 @@ style chip-inactive:
 style stat-card:
     direction = column
     padding = 12
-    corner-radius = 4
+    border-radius = 4
     background-color = bg-card
     gap = 4
     margin = 0 0 8 0
@@ -98,7 +99,7 @@ style btn:
     align = center
     justify = center
     height = 32
-    corner-radius = 3
+    border-radius = 3
     background-color = #141720
     border-color = #2a3050
     border-weight = 1
@@ -163,7 +164,7 @@ style inspector-field:
 
 style filter-tab:
     padding = 3 8
-    corner-radius = 2
+    border-radius = 2
     focusable = true
     transition = background-color 0.08 ease-out
 
@@ -185,7 +186,7 @@ root:
             node "status-dot":
                 width = 8
                 height = 8
-                corner-radius = 4
+                border-radius = 4
                 background-color = accent-green
             text "app-title":
                 content = "LINTEL RECV"
@@ -233,7 +234,7 @@ root:
             node:
                 width = 6
                 height = 6
-                corner-radius = 3
+                border-radius = 3
                 background-color = accent-green
             text:
                 content = "TCP :9000"
@@ -245,7 +246,7 @@ root:
             node:
                 width = 6
                 height = 6
-                corner-radius = 3
+                border-radius = 3
                 background-color = accent-green
             text:
                 content = "UDP :5514"
@@ -257,7 +258,7 @@ root:
             node:
                 width = 6
                 height = 6
-                corner-radius = 3
+                border-radius = 3
                 background-color = accent-warn
             text:
                 content = "KAFKA lag+4k"
@@ -420,7 +421,7 @@ root:
                     height = 18
                     margin = 0 0 8 0
                     text:
-                        content = "THROUGHPUT — last 60 s"
+                        content = "THROUGHPUT - last 60 s"
                         font-size = 10
                         font-family = "monospace"
                         text-color = text-muted
@@ -532,7 +533,7 @@ root:
                         width = 180
                         height = 24
                         padding = 0 8
-                        corner-radius = 3
+                        border-radius = 3
                         background-color = #0f1014
                         border-color = #282c3a
                         border-weight = 1
@@ -850,7 +851,7 @@ root:
                     node "hex-view":
                         direction = column
                         padding = 8
-                        corner-radius = 3
+                        border-radius = 3
                         background-color = #080910
                         gap = 3
                         text:

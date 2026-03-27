@@ -40,7 +40,7 @@ void ITextNode::sync_style() {
         if (*v != font_size) { font_size = *v; changed = true; }
     }
     if (const Color* v = attr.get<Color>(property::TextColor)) {
-        text_color = *v; // colour change — no re-measure needed
+        text_color = *v; // colour change - no re-measure needed
     }
     if (const bool* v = attr.get<bool>(property::Bold)) {
         if (*v != bold) { bold = *v; changed = true; }
@@ -51,7 +51,7 @@ void ITextNode::sync_style() {
     if (const bool* v = attr.get<bool>(property::Wrap)) {
         if (*v != wrap) { wrap = *v; changed = true; }
     }
-    // TextAlign is stored as float (integer cast) — same convention as Direction.
+    // TextAlign is stored as float (integer cast) - same convention as Direction.
     if (const float* v = attr.get<float>(property::TextAlign)) {
         TextAlign ta = static_cast<TextAlign>(static_cast<int>(*v));
         if (ta != text_align_val) { text_align_val = ta; changed = true; }
@@ -135,19 +135,19 @@ void ITextNode::wire_events(Node& handle) {
             case VK_HOME: on_move_home(shift); break;
             case VK_END:  on_move_end(shift);  break;
 
-            case 0x41: // Ctrl+A — select all
+            case 0x41: // Ctrl+A - select all
                 if (ctrl) { selection_anchor = 0; caret_pos = content.size(); }
                 break;
-            case 0x43: // Ctrl+C — copy
+            case 0x43: // Ctrl+C - copy
                 if (ctrl) copy_to_clipboard();
                 break;
-            case 0x58: // Ctrl+X — cut
+            case 0x58: // Ctrl+X - cut
                 if (ctrl && editable) {
                     copy_to_clipboard();
                     if (has_selection()) delete_selection();
                 }
                 break;
-            case 0x56: // Ctrl+V — paste
+            case 0x56: // Ctrl+V - paste
                 if (ctrl && editable) paste_from_clipboard();
                 break;
 
@@ -180,7 +180,7 @@ ComPtr<IDWriteTextLayout> ITextNode::make_layout(float max_w) const {
 }
 
 // ---------------------------------------------------------------------------
-// Layout — measure & arrange
+// Layout - measure & arrange
 // ---------------------------------------------------------------------------
 
 void ITextNode::measure(float avail_w, float avail_h) {
@@ -488,7 +488,7 @@ TextNode& TextNode::content(std::wstring_view c) {
 }
 
 TextNode& TextNode::text_align(TextAlign a) {
-    // Stored as float (integer cast) — sync_style() casts back to TextAlign.
+    // Stored as float (integer cast) - sync_style() casts back to TextAlign.
     handle<ITextNode>()->attr.set(property::TextAlign,
                                   static_cast<float>(static_cast<int>(a)));
     handle<ITextNode>()->invalidate_format();

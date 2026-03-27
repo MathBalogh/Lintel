@@ -53,7 +53,7 @@ bool GpuContext::initialize() {
     ));
 
     // -----------------------------------------------------------------------
-    // D2D device and device context — interop'd from the D3D11 device
+    // D2D device and device context - interop'd from the D3D11 device
     // -----------------------------------------------------------------------
 
     ComPtr<IDXGIDevice> dxgi_device;

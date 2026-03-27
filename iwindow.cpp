@@ -33,7 +33,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 // ===========================================================================
-// Window — construction / destruction
+// Window - construction / destruction
 // ===========================================================================
 
 Window::Window() {
@@ -120,14 +120,14 @@ Window::~Window() {
 }
 
 // ===========================================================================
-// Window — accessors
+// Window - accessors
 // ===========================================================================
 
 unsigned int Window::width()  const { return iptr_->width; }
 unsigned int Window::height() const { return iptr_->height; }
 
 // ===========================================================================
-// Window — run loop
+// Window - run loop
 // ===========================================================================
 
 int Window::run(std::function<void()> fn) {

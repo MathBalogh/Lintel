@@ -44,57 +44,57 @@ enum : uint32_t {
     // non-float properties inside it.
 
     BorderWeight = 1,   // float
-    CornerRadius,       // float
+    BorderRadius,       // float
 
-    FontSize,           // float  (moved before layout props deliberately —
+    FontSize,           // float  (moved before layout props deliberately -
     //         not a layout prop, but very commonly set)
 
-// Box-model: is_layout_prop() covers Width … JustifyItems.
-Width,              // float, NaN = auto
-Height,             // float, NaN = auto
-PaddingTop,         // float
-PaddingRight,       // float
-PaddingBottom,      // float
-PaddingLeft,        // float
-MarginTop,          // float
-MarginRight,        // float
-MarginBottom,       // float
-MarginLeft,         // float
-Gap,                // float
-Share,              // float  (flex share weight)
-Direction,          // float (cast of Direction enum)
-AlignItems,         // float (cast of Align enum)
-JustifyItems,       // float (cast of Justify enum)
+    // Box-model: is_layout_prop() covers Width … JustifyItems.
+    Width,              // float, NaN = auto
+    Height,             // float, NaN = auto
+    PaddingTop,         // float
+    PaddingRight,       // float
+    PaddingBottom,      // float
+    PaddingLeft,        // float
+    MarginTop,          // float
+    MarginRight,        // float
+    MarginBottom,       // float
+    MarginLeft,         // float
+    Gap,                // float
+    Share,              // float  (flex share weight)
+    Direction,          // float (cast of Direction enum)
+    AlignItems,         // float (cast of Align enum)
+    JustifyItems,       // float (cast of Justify enum)
 
-k_hot_float_end,    // ← sentinel; value = 19
+    k_hot_float_end,    // sentinel; value = 19
 
-// ── Hot colors [k_hot_float_end, k_hot_end) ─────────────────────────
-// Stored in Attributes::hot_c_[p - k_hot_float_end].
+    // ── Hot colors [k_hot_float_end, k_hot_end) ─────────────────────────
+    // Stored in Attributes::hot_c_[p - k_hot_float_end].
 
-BackgroundColor = k_hot_float_end,  // Color
-BorderColor,                        // Color
-TextColor,                          // Color
+    BackgroundColor = k_hot_float_end,  // Color
+    BorderColor,                        // Color
+    TextColor,                          // Color
 
-k_hot_end,          // ← sentinel; value = 22
+    k_hot_end,          // sentinel; value = 22
 
-// ── Cold properties [k_hot_end, …) ──────────────────────────────────
-// Stored in Attributes::cold_ (unordered_map) — allocated only when set.
-// Strings, bools, and less-frequently-touched props belong here.
+    // ── Cold properties [k_hot_end, …) ──────────────────────────────────
+    // Stored in Attributes::cold_ (unordered_map) - allocated only when set.
+    // Strings, bools, and less-frequently-touched props belong here.
 
-FontFamily = k_hot_end,  // std::wstring
+    FontFamily = k_hot_end,  // std::wstring
 
-Bold,           // bool
-Italic,         // bool
-Wrap,           // bool
-TextAlign,      // float (cast of TextAlign enum)
-Editable,       // bool
+    Bold,           // bool
+    Italic,         // bool
+    Wrap,           // bool
+    TextAlign,      // float (cast of TextAlign enum)
+    Editable,       // bool
 
-GridColor,      // Color
-GridWeight,     // float
-LabelColor,     // Color
-LabelFontSize,  // float
+    GridColor,      // Color
+    GridWeight,     // float
+    LabelColor,     // Color
+    LabelFontSize,  // float
 
-Opacity,        // float
+    Opacity,        // float
 };
 
 } // namespace property
@@ -153,7 +153,7 @@ struct Color {
 // ---------------------------------------------------------------------------
 //
 // Kept as a standalone struct for future use by an animate() API.
-// Removed from PropValue — passing animation overrides through the attribute
+// Removed from PropValue - passing animation overrides through the attribute
 // map was the wrong abstraction: it inflated every stored value and made the
 // hot array unnecessarily large.  Per-call overrides are now passed as
 // separate arguments to INode::animate_prop().
@@ -169,7 +169,7 @@ struct AnimateDescriptor {
 // ---------------------------------------------------------------------------
 //
 // The value type stored in Attributes and StyleSheet.
-// AnimateDescriptor is no longer a variant member — it lived here only to
+// AnimateDescriptor is no longer a variant member - it lived here only to
 // support the (still-commented-out) animate() value function, and its 24-byte
 // footprint was the single largest contributor to Attributes bloat.
 //
@@ -185,9 +185,9 @@ using AttribValue = PropValue;   // backward-compat alias
 //
 // Per-node property bag with two-tier hot storage:
 //
-//   Tier 1 — hot floats:  float hot_f_[18]   +  uint32_t bitmask   = 76 B
-//   Tier 2 — hot colors:  Color hot_c_[3]    +  uint8_t  bitmask   = 49 B
-//   Tier 3 — cold map:    unordered_map (heap-allocated only when used)
+//   Tier 1 - hot floats:  float hot_f_[18]   +  uint32_t bitmask   = 76 B
+//   Tier 2 - hot colors:  Color hot_c_[3]    +  uint8_t  bitmask   = 49 B
+//   Tier 3 - cold map:    unordered_map (heap-allocated only when used)
 //
 // Total object size (cold map empty) ≈ 130 B vs the previous 920 B.
 //

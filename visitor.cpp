@@ -59,7 +59,7 @@ void StyleResolver::visit(StyleDecl& d) {
             const auto& ref = child->as<ApplyExpr>().style;
             if (const PropertyMap* base = style(ref))
                 for (const auto& [k, v] : *base)
-                    pm.emplace(k, v); // don't overwrite — child wins
+                    pm.emplace(k, v); // don't overwrite - child wins
         }
         // OnDecl inside a style is left for EventBinder / TreeBuilder.
     }

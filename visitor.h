@@ -6,7 +6,7 @@
 
 namespace lintel::parser {
 
-// ─── NodeVisitor — base interface ─────────────────────────────────────────────
+// ─── NodeVisitor - base interface ─────────────────────────────────────────────
 //
 // Provides virtual hooks for every node kind that carries semantic content.
 // All hooks default to no-ops so concrete visitors only override what they need.
@@ -31,7 +31,7 @@ struct NodeVisitor {
     virtual void visit(PropDecl&) {}
     virtual void visit(OnDecl&) {}
 
-    // Containers — default implementations recurse into children.
+    // Containers - default implementations recurse into children.
     virtual void visit(StyleDecl& s);
     virtual void visit(NodeDecl& n);
 };
@@ -42,11 +42,11 @@ void traverse(AST& ast, NodeVisitor& v);
 // Dispatch a single node to the correct virtual override.
 void dispatch(Node& node, NodeVisitor& v);
 
-// ─── PropertyMap — a resolved key→value mapping ───────────────────────────────
+// ─── PropertyMap - a resolved key→value mapping ───────────────────────────────
 
 using PropertyMap = std::unordered_map<std::string, Node*>;
 
-// ─── StyleResolver — pass 1 ───────────────────────────────────────────────────
+// ─── StyleResolver - pass 1 ───────────────────────────────────────────────────
 //
 // Walk the AST once to collect:
 //   • VarDecl bindings  (global variables)
@@ -58,7 +58,7 @@ using PropertyMap = std::unordered_map<std::string, Node*>;
 //   resolver.var("text-muted")   → raw Node* for that variable (or nullptr)
 //
 // An optional on_apply callback is fired whenever an ApplyExpr is encountered
-// during traversal — useful for immediate style application in a single pass.
+// during traversal - useful for immediate style application in a single pass.
 
 struct StyleResolver : NodeVisitor {
     using ApplyCallback = std::function<void(const std::string& style, const PropertyMap&)>;
@@ -96,7 +96,7 @@ private:
     std::unordered_map<std::string, PropertyMap>   styles_;
 };
 
-// ─── EventBinder — pass 2 (or combined with TreeBuilder) ─────────────────────
+// ─── EventBinder - pass 2 (or combined with TreeBuilder) ─────────────────────
 //
 // Traverses NodeDecl trees and records each OnDecl together with its parent
 // NodeDecl so the caller can wire event handlers after the scene is built.

@@ -36,7 +36,7 @@ void Lexer::handle_indent() {
         // Count leading horizontal whitespace.
         while (ch() == ' ' || ch() == '\t') { ++col; ++cur_; }
 
-        if (ch() == '\n') { ++cur_; continue; }           // blank line — skip
+        if (ch() == '\n') { ++cur_; continue; }           // blank line - skip
 
         if (ch() == '\0') {
             // EOF after newline: close all open indent levels.
@@ -52,7 +52,7 @@ void Lexer::handle_indent() {
         if (ch() == '/' && ch(1) == '/') {
             while (ch() != '\n' && ch() != '\0') ++cur_;
             if (ch() == '\n') { ++cur_; continue; }
-            // EOF inside comment — treat like EOF above.
+            // EOF inside comment - treat like EOF above.
             while (indent_stack_.size() > 1) {
                 indent_stack_.pop_back();
                 pending_.push_back(make(TokenKind::Dedent, cur_, cur_));
@@ -110,7 +110,7 @@ Token Lexer::next() {
         return make(TokenKind::EndOfFile, b, b);
     }
 
-    // ── Newline — emit Newline token then process indentation ─────────────────
+    // ── Newline - emit Newline token then process indentation ─────────────────
     if (c == '\n') {
         ++cur_;
         handle_indent(); // populates pending_ if indent/dedent

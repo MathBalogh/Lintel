@@ -19,7 +19,7 @@ inline bool  is_auto(float v) { return std::isnan(v); }
 inline float nan_f() { return std::numeric_limits<float>::quiet_NaN(); }
 
 // ---------------------------------------------------------------------------
-// Tween — one in-flight interpolation
+// Tween - one in-flight interpolation
 // ---------------------------------------------------------------------------
 //
 // Unchanged from before except that 'range' can no longer hold an
@@ -38,7 +38,7 @@ struct Tween {
 };
 
 // ---------------------------------------------------------------------------
-// INode — internal node implementation
+// INode - internal node implementation
 // ---------------------------------------------------------------------------
 
 class INode {
@@ -80,7 +80,7 @@ public:
     std::vector<Tween>                           tweens_;
     bool                                         has_active_tweens_ = false;
 
-    // ── animate_prop — primary overload ──────────────────────────────────
+    // ── animate_prop - primary overload ──────────────────────────────────
     //
     // If transitions_ contains a spec for prop, a Tween is created (or the
     // existing one restarted from the current live value).  Otherwise the
@@ -92,7 +92,7 @@ public:
 
     void animate_prop(Property p, const PropValue& target);
 
-    // ── animate_prop — per-call duration / easing override ───────────────
+    // ── animate_prop - per-call duration / easing override ───────────────
     //
     // Equivalent to the old AnimateDescriptor path.  Preferable for
     // programmatic callers that know the easing at the call site.
@@ -104,7 +104,7 @@ public:
 
     void tick_tweens(float dt);
 
-    // ── Layout accessors — read PropValue from attr ───────────────────────
+    // ── Layout accessors - read PropValue from attr ───────────────────────
 
     float     layout_width()     const;
     float     layout_height()    const;
@@ -184,7 +184,7 @@ private:
 template class Impl<INode>;
 
 // ---------------------------------------------------------------------------
-// Fire helpers — inline definitions
+// Fire helpers - inline definitions
 // ---------------------------------------------------------------------------
 
 inline void fire_with_context(

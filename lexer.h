@@ -39,7 +39,7 @@ class Lexer {
     // ── Internal scanners ─────────────────────────────────────────────────────
 
     // Skip spaces/tabs and block comments on the current line.
-    // Does NOT consume '\n' — newlines are handled explicitly in next().
+    // Does NOT consume '\n' - newlines are handled explicitly in next().
     void skip_horiz() {
         while (true) {
             char c = ch();
@@ -50,7 +50,7 @@ class Lexer {
                 while (ch() != '\n' && ch() != '\0') ++cur_;
                 return; // next char is '\n' or '\0'; let next() handle it
             }
-            // block comment: may span lines — treated as transparent whitespace
+            // block comment: may span lines - treated as transparent whitespace
             if (c == '/' && ch(1) == '*') {
                 cur_ += 2;
                 while (ch() != '\0') {
@@ -123,7 +123,7 @@ class Lexer {
         return make(TokenKind::Identifier, start, e);
     }
 
-    // Raw next token — does not touch look_.
+    // Raw next token - does not touch look_.
     // Callers should go through peek() / pop().
     Token next();
 

@@ -109,7 +109,7 @@ void Core::shutdown() {
 }
 
 // ---------------------------------------------------------------------------
-// process_message — full Win32 input dispatch
+// process_message - full Win32 input dispatch
 // ---------------------------------------------------------------------------
 
 void Core::process_message(UINT msg, WPARAM wp, LPARAM lp) {
@@ -134,7 +134,7 @@ void Core::process_message(UINT msg, WPARAM wp, LPARAM lp) {
         }
 
         // -----------------------------------------------------------------------
-        // Mouse move — hover update, drag progression, and normal MouseMove
+        // Mouse move - hover update, drag progression, and normal MouseMove
         // -----------------------------------------------------------------------
 
         case WM_MOUSEMOVE:
@@ -208,7 +208,7 @@ void Core::process_message(UINT msg, WPARAM wp, LPARAM lp) {
         }
 
         // -----------------------------------------------------------------------
-        // Mouse leave — clear all hover state
+        // Mouse leave - clear all hover state
         // -----------------------------------------------------------------------
 
         case WM_MOUSELEAVE:
@@ -219,7 +219,7 @@ void Core::process_message(UINT msg, WPARAM wp, LPARAM lp) {
             break;
 
             // -----------------------------------------------------------------------
-            // Button down — press, optional focus transfer
+            // Button down - press, optional focus transfer
             // -----------------------------------------------------------------------
 
         case WM_LBUTTONDOWN:
@@ -256,7 +256,7 @@ void Core::process_message(UINT msg, WPARAM wp, LPARAM lp) {
         }
 
         // -----------------------------------------------------------------------
-        // Button up — release, click, double-click, drag end
+        // Button up - release, click, double-click, drag end
         // -----------------------------------------------------------------------
 
         case WM_LBUTTONUP:
@@ -390,7 +390,7 @@ void Core::process_message(UINT msg, WPARAM wp, LPARAM lp) {
         }
 
         // -----------------------------------------------------------------------
-        // Key down — Tab advances focus; all others route to the focused node
+        // Key down - Tab advances focus; all others route to the focused node
         // -----------------------------------------------------------------------
 
         case WM_KEYDOWN:
@@ -436,7 +436,7 @@ void Core::process_message(UINT msg, WPARAM wp, LPARAM lp) {
         }
 
         // -----------------------------------------------------------------------
-        // Character input — routes to the focused node
+        // Character input - routes to the focused node
         // -----------------------------------------------------------------------
 
         case WM_CHAR:
@@ -458,7 +458,7 @@ void Core::process_message(UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 // ---------------------------------------------------------------------------
-// process_default — layout, draw, present
+// process_default - layout, draw, present
 // ---------------------------------------------------------------------------
 //
 // Called by the worker thread after each message-flush.  Present(1, 0) syncs

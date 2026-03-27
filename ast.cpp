@@ -61,7 +61,7 @@ Color HexExpr::to_color() const {
     };
     if (hex.size() == 6) return Color::rgb(byte2(0), byte2(2), byte2(4), 1.f);
     if (hex.size() == 8) return Color::rgb(byte2(0), byte2(2), byte2(4), byte2(6));
-    std::cerr << "malformed hex colour '#" << hex << "' — defaulted to black\n";
+    std::cerr << "malformed hex colour '#" << hex << "' - defaulted to black\n";
     return Color::rgb(0.f, 0.f, 0.f, 1.f);
 }
 

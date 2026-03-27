@@ -1,4 +1,4 @@
-// load.cpp — parse → resolve → build StyleSheet → build scene graph.
+// load.cpp - parse → resolve → build StyleSheet → build scene graph.
 //
 // Previous responsibilities (now moved):
 //   • apply_one_prop / animate_one_prop   → StyleSheet::dispatch_prop()
@@ -163,7 +163,7 @@ static StyleSheet build_stylesheet(const AST& ast, const StyleResolver& res) {
                 Event ev = FRAMEWORK.get_event(od.event);
                 if (ev == Event::Null) {
                     std::cerr << "load: unknown event '" << od.event
-                        << "' in style '" << sd.name << "' — skipped\n";
+                        << "' in style '" << sd.name << "' - skipped\n";
                     continue;
                 }
                 std::vector<StyleSheet::Prop> deltas;
@@ -202,7 +202,7 @@ class TreeBuilder {
 
         lintel::Node node = FRAMEWORK.create_node(decl.tag);
         if (!node) {
-            std::cerr << "load: unknown node type '" << decl.tag << "' — skipped\n";
+            std::cerr << "load: unknown node type '" << decl.tag << "' - skipped\n";
             return;
         }
         lintel::Node& n = parent.push(std::move(node));
@@ -210,7 +210,7 @@ class TreeBuilder {
         // 1. Seed with inherited values.
         apply_inherited(n, inherited);
 
-        // 2. Applied styles — iterate props in declaration order.
+        // 2. Applied styles - iterate props in declaration order.
         for (Node* child : decl.props) {
             if (!child || child->kind != NodeKind::ApplyExpr) continue;
             sheet_.apply(n, child->as<ApplyExpr>().style);
@@ -232,7 +232,7 @@ class TreeBuilder {
 
             Event ev = FRAMEWORK.get_event(od.event);
             if (ev == Event::Null) {
-                std::cerr << "load: unknown event '" << od.event << "' — skipped\n";
+                std::cerr << "load: unknown event '" << od.event << "' - skipped\n";
                 continue;
             }
 
@@ -309,18 +309,18 @@ LoadResult load(const char* path) {
     std::string source((std::istreambuf_iterator<char>(file)),
                        std::istreambuf_iterator<char>());
 
-    // Pass 1 — lex + parse → AST.
+    // Pass 1 - lex + parse → AST.
     parser::AST ast;
     parser::parse(source, ast);
 
-    // Pass 2 — collect variables and style declarations.
+    // Pass 2 - collect variables and style declarations.
     parser::StyleResolver resolver(ast);
     traverse(ast, resolver);
 
-    // Pass 2b — resolve AST style nodes into a StyleSheet.
+    // Pass 2b - resolve AST style nodes into a StyleSheet.
     StyleSheet sheet = parser::build_stylesheet(ast, resolver);
 
-    // Pass 3 — build the runtime scene graph.
+    // Pass 3 - build the runtime scene graph.
     LoadResult result;
     parser::TreeBuilder(sheet, resolver).run(result.root, ast);
     result.sheet = std::move(sheet);

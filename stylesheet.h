@@ -1,7 +1,7 @@
 #pragma once
 // stylesheet.h
 //
-// StyleSheet — a reusable, AST-independent collection of named styles.
+// StyleSheet - a reusable, AST-independent collection of named styles.
 //
 // Design goals
 // ────────────
@@ -21,7 +21,7 @@
 //    auto [root, sheet] = lintel::load("ui.lt");
 //    CORE.root.push(std::move(root));
 //
-//    // Later — dynamically styled node:
+//    // Later - dynamically styled node:
 //    auto& btn = someParent.push();
 //    sheet.apply(btn, "button");
 //    sheet.apply(btn, "button-danger");  // override on top

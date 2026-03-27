@@ -34,9 +34,9 @@ enum class TokenKind {
     Quote,      // kept in table for symmetry; lexer emits Identifier for "…"
     Colon,
     Equals,
-    Newline,    // '\n' — logical-line terminator
-    Indent,     // synthetic — indentation level increased
-    Dedent,     // synthetic — indentation level decreased
+    Newline,    // '\n' - logical-line terminator
+    Indent,     // synthetic - indentation level increased
+    Dedent,     // synthetic - indentation level decreased
     __PunctuatorsEnd,
     __TokenEnd
 };
@@ -60,7 +60,7 @@ enum class NodeKind {
     NumExpr,   // numeric literal
     HexExpr,   // hex colour   (#rrggbb)
     BoolExpr,  // true | false
-    CallExpr,  // func(a, b, …) — reserved for future function-value support
+    CallExpr,  // func(a, b, …) - reserved for future function-value support
     ListExpr,  // space-separated value list  e.g. "4 8 4 8"
 
     ApplyExpr, // apply <style-name>
@@ -78,7 +78,7 @@ enum class NodeKind {
 
 struct Error {
     Range       range;
-    Range       line_column; // {line, column} — both 1-based
+    Range       line_column; // {line, column} - both 1-based
     std::string message;
 };
 
@@ -187,7 +187,7 @@ struct AST : Node {
     std::string_view                     source;
     std::vector<Error>                   errors;
 
-    // Allocate a node into the monotonic arena — nodes share the AST's lifetime.
+    // Allocate a node into the monotonic arena - nodes share the AST's lifetime.
     template<class T, class... Args>
     T* make(Args&&... args) {
         std::pmr::polymorphic_allocator<std::byte> alloc(data);

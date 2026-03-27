@@ -6,11 +6,11 @@
 namespace lintel {
 
 // ===========================================================================
-// Layout accessors — read from attr with typed defaults
+// Layout accessors - read from attr with typed defaults
 // ===========================================================================
 //
 // Enum-valued property::s (Direction, Align, Justify) are stored as float (integer
-// cast) in the attribute map — the same convention used by TextAlign — because
+// cast) in the attribute map - the same convention used by TextAlign - because
 // AttribValue has no enum slot.  The accessors cast back on read.
 //
 
@@ -65,7 +65,7 @@ Justify INode::layout_justify() const {
 }
 
 // ===========================================================================
-// INode — geometry helpers
+// INode - geometry helpers
 // ===========================================================================
 
 float INode::inner_w()   const { return std::max(0.f, rect.w - layout_padding().horizontal()); }
@@ -74,7 +74,7 @@ float INode::content_x() const { return rect.x + layout_padding().left; }
 float INode::content_y() const { return rect.y + layout_padding().top; }
 
 // ===========================================================================
-// INode — tree utilities
+// INode - tree utilities
 // ===========================================================================
 
 Node* INode::find_hit(Node& self, float sx, float sy) {
@@ -126,7 +126,7 @@ void INode::bubble_up(INode* from_impl, Event type) {
 }
 
 // ===========================================================================
-// INode — focus utilities
+// INode - focus utilities
 // ===========================================================================
 
 void INode::set_focus(WeakNode target) {
@@ -179,7 +179,7 @@ void INode::focus_next(Node& tree_root) {
 }
 
 // ===========================================================================
-// INode — layout
+// INode - layout
 // ===========================================================================
 
 void INode::measure(float avail_w, float avail_h) {
@@ -257,15 +257,13 @@ void INode::measure(float avail_w, float avail_h) {
     cached_avail_h_ = avail_h;
     attr.layout_dirty = false;
 }
-
 void INode::arrange(float slot_x, float slot_y) {
     const Edges margin = layout_margin();
     rect.x = slot_x + margin.left;
     rect.y = slot_y + margin.top;
-
     if (!children.empty()) {
         if (layout_direction() == Direction::Column) arrange_column();
-        else                                          arrange_row();
+        else arrange_row();
     }
 }
 
@@ -275,7 +273,7 @@ void INode::layout(float slot_x, float slot_y, float avail_w, float avail_h) {
 }
 
 // ---------------------------------------------------------------------------
-// arrange_column — main axis = Y
+// arrange_column - main axis = Y
 // ---------------------------------------------------------------------------
 
 void INode::arrange_column() {
@@ -345,7 +343,7 @@ void INode::arrange_column() {
 }
 
 // ---------------------------------------------------------------------------
-// arrange_row — main axis = X
+// arrange_row - main axis = X
 // ---------------------------------------------------------------------------
 
 void INode::arrange_row() {
@@ -423,14 +421,14 @@ float INode::resolve_cross_x(INode* ci, float iw) {
     const float avail = iw - margin.horizontal();
     switch (layout_align()) {
         case Align::Center:
-            return content_x() + margin.left + (avail - ci->rect.w) * 0.5f;
+            return content_x() + (avail - ci->rect.w) * 0.5f;
         case Align::End:
             return content_x() + iw - margin.right - ci->rect.w;
         case Align::Stretch:
             ci->rect.w = std::max(0.f, avail);
-            return content_x() + margin.left;
+            return content_x();
         default: // Start
-            return content_x() + margin.left;
+            return content_x();
     }
 }
 
@@ -439,19 +437,19 @@ float INode::resolve_cross_y(INode* ci, float ih) {
     const float avail = ih - margin.vertical();
     switch (layout_align()) {
         case Align::Center:
-            return content_y() + margin.top + (avail - ci->rect.h) * 0.5f;
+            return content_y() + (avail - ci->rect.h) * 0.5f;
         case Align::End:
             return content_y() + ih - margin.bottom - ci->rect.h;
         case Align::Stretch:
             ci->rect.h = std::max(0.f, avail);
-            return content_y() + margin.top;
+            return content_y();
         default: // Start
-            return content_y() + margin.top;
+            return content_y();
     }
 }
 
 // ===========================================================================
-// INode — draw
+// INode - draw
 // ===========================================================================
 
 void INode::draw(Node& self, Canvas& canvas) {
@@ -461,7 +459,7 @@ void INode::draw(Node& self, Canvas& canvas) {
 }
 
 void INode::draw_default(Canvas& canvas) {
-    const float radius = attr.get_or<float>(property::CornerRadius, 0.f);
+    const float radius = attr.get_or<float>(property::BorderRadius, 0.f);
 
     if (const Color* bg = attr.get<Color>(property::BackgroundColor))
         canvas.fill_rect(rect, *bg, radius);
@@ -474,7 +472,7 @@ void INode::draw_default(Canvas& canvas) {
 }
 
 // ===========================================================================
-// Node — constructors / destructor / move
+// Node - constructors / destructor / move
 // ===========================================================================
 
 Node::Node() { impl_allocate(); }
@@ -497,7 +495,7 @@ Node& Node::operator=(Node&& other) noexcept {
 }
 
 // ===========================================================================
-// Node — tree mutation
+// Node - tree mutation
 // ===========================================================================
 
 Node& Node::push() {
@@ -542,7 +540,7 @@ Node* Node::child(size_t index) {
 }
 
 // ===========================================================================
-// Node — style / layout setters (fluent)
+// Node - style / layout setters (fluent)
 // ===========================================================================
 //
 // Every setter writes to attr using the canonical property:: key.  This is the
@@ -603,7 +601,7 @@ Node& Node::focusable(bool f) { iptr_->focusable_flag = f; return *this; }
 Node& Node::draggable(bool d) { iptr_->draggable_flag = d; return *this; }
 
 // ===========================================================================
-// Node — event binding
+// Node - event binding
 // ===========================================================================
 
 Node& Node::on(Event type, EventHandler fn) {
@@ -616,12 +614,8 @@ void Node::clear_on_of(Event type) {
 }
 
 // ===========================================================================
-// Node — query
+// Node - query
 // ===========================================================================
-
-float* Node::margin_bottom() {
-    return iptr_->attr.float_ref(property::MarginBottom);
-}
 
 Rect  Node::rect()    const { return iptr_->rect; }
 float Node::mouse_x() const { return CORE.input.mouse_screen_x - iptr_->content_x(); }
@@ -645,7 +639,7 @@ static float ease(float t, Easing e) noexcept {
 }
 
 // ---------------------------------------------------------------------------
-// animate_prop_impl — shared tween construction
+// animate_prop_impl - shared tween construction
 // ---------------------------------------------------------------------------
 //
 // Finds or creates the TransitionSpec, cancels any existing tween for the
@@ -692,7 +686,7 @@ void INode::animate_prop_impl(Property p, Color target,
 }
 
 // ---------------------------------------------------------------------------
-// animate_prop — primary overload (PropValue target, node-level spec)
+// animate_prop - primary overload (PropValue target, node-level spec)
 // ---------------------------------------------------------------------------
 
 void INode::animate_prop(Property p, const PropValue& target) {
@@ -720,7 +714,7 @@ void INode::animate_prop(Property p, const PropValue& target) {
 }
 
 // ---------------------------------------------------------------------------
-// animate_prop — per-call duration / easing overloads
+// animate_prop - per-call duration / easing overloads
 // ---------------------------------------------------------------------------
 //
 // These replace the old AnimateDescriptor path.  Use them when the animation
@@ -743,7 +737,7 @@ void INode::animate_prop(Property p, Color target,
 }
 
 // ---------------------------------------------------------------------------
-// tick_tweens — unchanged except PropValue is used in attr.set() calls
+// tick_tweens - unchanged except PropValue is used in attr.set() calls
 // ---------------------------------------------------------------------------
 
 void INode::tick_tweens(float dt) {
@@ -786,7 +780,7 @@ void INode::tick_tweens(float dt) {
 }
 
 // ---------------------------------------------------------------------------
-// apply — snap write, fires apply_notifier
+// apply - snap write, fires apply_notifier
 // ---------------------------------------------------------------------------
 
 void INode::apply(Property p, PropValue val) {

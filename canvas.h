@@ -1,7 +1,7 @@
 #pragma once
 // canvas.h
 //
-// Canvas — the single drawing surface every node renders through.
+// Canvas - the single drawing surface every node renders through.
 //
 // Design goals
 // ------------
@@ -17,8 +17,8 @@
 //  same Canvas& to its children so a single instance is shared for the whole
 //  frame.
 //
-//  For operations that must persist outside the draw pass — specifically the
-//  DWrite text formats and layouts in ITextNode — Canvas is also accessible
+//  For operations that must persist outside the draw pass - specifically the
+//  DWrite text formats and layouts in ITextNode - Canvas is also accessible
 //  via CORE.canvas so that measure() and event handlers can call the factory
 //  methods without receiving a Canvas& parameter.
 //
@@ -65,7 +65,7 @@ public:
 
     // -- Images ----------------------------------------------------------
     /**
-     * Load a bitmap from disk (PNG, JPG, BMP, … — any WIC-supported format).
+     * Load a bitmap from disk (PNG, JPG, BMP, … - any WIC-supported format).
      * Returns empty ComPtr on any failure.  The bitmap is created on the
      * D2D device and can be cached safely on the node.
      */

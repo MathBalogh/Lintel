@@ -58,7 +58,6 @@ public:
 
     // -- Query -----------------------------------------------------------
 
-    float* margin_bottom();
     Rect   rect()    const;
     float  mouse_x() const;
     float  mouse_y() const;

@@ -38,7 +38,7 @@ struct DataSeries {
 // Visual style is intentionally minimal / dark-mode:
 //   - Grid lines are very faint (override via attribs::grid_color).
 //   - Axis labels are muted blue-gray (override via attribs::label_color).
-//   - No axis-box border — the grid lines define the extent.
+//   - No axis-box border - the grid lines define the extent.
 //
 // Axis ranges default to auto (derived from data bounding box).  Manual ranges
 // are set through GraphNode::x_range() / y_range().
@@ -52,7 +52,7 @@ class IGraphNode : public INode {
 public:
     std::vector<DataSeries> series;
 
-    // Manual axis ranges — NaN means "auto-compute from data each frame".
+    // Manual axis ranges - NaN means "auto-compute from data each frame".
     float range_x_min = nan_f();
     float range_x_max = nan_f();
     float range_y_min = nan_f();
@@ -94,7 +94,7 @@ private:
     // Normalises -0 to 0 so axis labels never show a spurious minus sign.
     static std::wstring format_tick(float v, float step);
 
-    // ---- Draw sub-passes — all take Canvas& instead of GPU pointers ----
+    // ---- Draw sub-passes - all take Canvas& instead of GPU pointers ----
 
     // Horizontal grid lines at Y-tick positions; fainter vertical lines at
     // X-tick positions; a slightly brighter line at y == 0 when in range.

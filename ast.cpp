@@ -1,5 +1,6 @@
 #include "ast.h"
 #include <charconv>
+#include <iostream>
 
 namespace lintel::parser {
 

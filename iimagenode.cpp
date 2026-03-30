@@ -8,7 +8,7 @@ namespace lintel {
 
 void IImageNode::ensure_bitmap() {
     if (bitmap_ || image_path_.empty()) return;
-    bitmap_ = CORE.canvas.load_bitmap(image_path_);
+    bitmap_ = CANVAS.load_bitmap(image_path_);
 }
 
 // ---------------------------------------------------------------------------

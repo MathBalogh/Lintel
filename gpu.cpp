@@ -1,5 +1,9 @@
 #include "gpu.h"
 
+GpuContext::GpuContext() {
+    initialize();
+}
+
 bool GpuContext::initialize() {
     // -----------------------------------------------------------------------
     // D3D11 device + immediate context
@@ -32,13 +36,6 @@ bool GpuContext::initialize() {
     // -----------------------------------------------------------------------
     // D2D factory
     // -----------------------------------------------------------------------
-    //
-    // MULTI_THREADED is required because the D2D device context is created on
-    // the main thread (inside Window::Window) but drawn on the worker thread
-    // inside Core::process_default.  Rendering is serialised by the worker
-    // loop, so there is no concurrent access, but D2D still needs the
-    // multi-threaded flag to permit cross-thread usage.
-    //
 
     D2D1_FACTORY_OPTIONS factory_opts = {};
     #if defined(_DEBUG)
@@ -76,10 +73,15 @@ bool GpuContext::initialize() {
     // WIC factory
     // -----------------------------------------------------------------------
 
-    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    HR_RET_F(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED));
     HR_RET_F(CoCreateInstance(CLSID_WICImagingFactory, nullptr,
              CLSCTX_INPROC_SERVER,
              IID_PPV_ARGS(&wic_factory)));
 
     return true;
+}
+
+GpuContext& GpuContext::get() {
+    static GpuContext instance;
+    return instance;
 }

@@ -13,7 +13,6 @@
 // The ~120 lines of duplicated dispatch are now ~60 lines that both load() and
 // runtime apply() share.
 
-#include "stylesheet.h"
 #include "inode.h"          // INode::apply, INode::animate_prop
 #include "framework.h"      // FRAMEWORK.get_property(), get_event()
 
@@ -300,20 +299,26 @@ void StyleSheet::apply(Node& n, std::string_view style_name) const {
 
 // ─── StyleSheet build API ─────────────────────────────────────────────────────
 
-StyleSheet& StyleSheet::define(std::string name,
-                               std::vector<Prop>    props,
-                               std::vector<Handler> handlers) {
+StyleSheet& StyleSheet::define(std::string name, std::vector<Prop> props, std::vector<Handler> handlers) {
     Style& s = styles_[std::move(name)];
     s.props = std::move(props);
     s.handlers = std::move(handlers);
     return *this;
 }
 
-StyleSheet& StyleSheet::define_handler(const std::string& name,
-                                       Event              event,
-                                       std::vector<Prop>  deltas) {
+StyleSheet& StyleSheet::define_handler(const std::string& name, Event event, std::vector<Prop> deltas) {
     styles_[name].handlers.push_back({ event, std::move(deltas) });
     return *this;
+}
+
+void StyleSheet::register_node(const std::string& name, WeakNode node) {
+    named_[name] = node;
+}
+WeakNode StyleSheet::find(const char* name) {
+    if (auto it = named_.find(name); it != named_.end()) {
+        return it->second;
+    }
+    return WeakNode(nullptr);
 }
 
 // ─── Query ────────────────────────────────────────────────────────────────────

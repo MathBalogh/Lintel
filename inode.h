@@ -21,15 +21,10 @@ inline float nan_f() { return std::numeric_limits<float>::quiet_NaN(); }
 // ---------------------------------------------------------------------------
 // Tween - one in-flight interpolation
 // ---------------------------------------------------------------------------
-//
-// Unchanged from before except that 'range' can no longer hold an
-// AnimateDescriptor: that type has been removed from PropValue and the
-// per-call duration/easing override is now a separate animate_prop overload.
 
 struct Tween {
     Property prop = 0;
 
-    // Holds either {from,to} floats or {from,to} Colors.
     std::variant<std::pair<float, float>, std::pair<Color, Color>> range;
 
     float  elapsed = 0.f;
@@ -43,10 +38,23 @@ struct Tween {
 
 class INode {
 public:
-    virtual ~INode() = default;
+    // Destructor: clears document-level weak refs that point at this node.
+    // Safe to call even when doc_ is null (node was never in a document).
+    virtual ~INode() {
+        if (doc_) doc_->clear_node(this);
+    }
 
-    virtual void apply_notifier(Property p) {}
+    virtual void apply_callback(Property p) {}
     void apply(Property p, PropValue val);
+
+    // -- Document back-pointer -------------------------------------------
+    //
+    // Null until the node is adopted into a Document's tree (via
+    // Document::bind_root() or Node::push()).  Cleared when the subtree is
+    // detached via Node::remove().  Never owned — the Document outlives all
+    // of its nodes.
+
+    Document* doc_ = nullptr;
 
     // -- Handler storage -------------------------------------------------
 
@@ -80,31 +88,12 @@ public:
     std::vector<Tween>                           tweens_;
     bool                                         has_active_tweens_ = false;
 
-    // ── animate_prop - primary overload ──────────────────────────────────
-    //
-    // If transitions_ contains a spec for prop, a Tween is created (or the
-    // existing one restarted from the current live value).  Otherwise the
-    // value is snapped immediately via apply().
-    //
-    // PropValue replaces AttribValue here.  AnimateDescriptor is gone from
-    // the variant; use the second overload below when a per-call duration or
-    // easing override is needed.
-
     void animate_prop(Property p, const PropValue& target);
-
-    // ── animate_prop - per-call duration / easing override ───────────────
-    //
-    // Equivalent to the old AnimateDescriptor path.  Preferable for
-    // programmatic callers that know the easing at the call site.
-
     void animate_prop(Property p, float  target, float duration, Easing easing);
     void animate_prop(Property p, Color  target, float duration, Easing easing);
-
-    // ── tick_tweens ──────────────────────────────────────────────────────
-
     void tick_tweens(float dt);
 
-    // ── Layout accessors - read PropValue from attr ───────────────────────
+    // ── Layout accessors -------------------------------------------------
 
     float     layout_width()     const;
     float     layout_height()    const;
@@ -160,13 +149,19 @@ public:
     // -- Tree utilities --------------------------------------------------
 
     Node* find_hit(Node& self, float sx, float sy);
-    void   update_hover(WeakNode self, float sx, float sy);
-    static void bubble_up(INode* from_impl, Event type);
 
-    // -- Focus utilities -------------------------------------------------
+    // update_hover is called by Document::dispatch_mouse_move / leave.
+    // It fires MouseEnter / MouseLeave events on nodes whose mouse_inside
+    // state changes.  Uses doc_ to reach InputState.
+    void update_hover(WeakNode self, float sx, float sy);
 
-    static void set_focus(WeakNode target);
-    static void focus_next(Node& tree_root);
+    // bubble_up re-fires an already-dispatched event up the parent chain,
+    // adjusting mouse coordinates at each ancestor.
+    // Uses doc_ (inherited from the originating node).
+    void bubble_up(Event type);
+
+    // collect_focusable gathers all focusable nodes in document order.
+    static void collect_focusable(INode* node, std::vector<INode*>& out);
 
 private:
     void   arrange_column();
@@ -174,25 +169,26 @@ private:
     float  resolve_cross_x(INode* child, float inner_width);
     float  resolve_cross_y(INode* child, float inner_height);
 
-    static void collect_focusable(INode* node, std::vector<INode*>& out);
-
-    // Shared implementation for all animate_prop overloads.
     void animate_prop_impl(Property p, float target, float duration, Easing easing);
     void animate_prop_impl(Property p, Color  target, float duration, Easing easing);
 };
-
-template class Impl<INode>;
+extern template class Impl<INode>;
 
 // ---------------------------------------------------------------------------
 // Fire helpers - inline definitions
 // ---------------------------------------------------------------------------
+//
+// These write to doc.input so every handler callback sees coherent state,
+// then invoke the handlers on the target node.
 
 inline void fire_with_context(
+    Document& doc,
     INode* impl, WeakNode handle,
     Event type, float local_x, float local_y,
     MouseButton btn, Modifiers mods,
-    float scroll_dx = 0.f, float scroll_dy = 0.f) {
-    InputState& inp = CORE.input;
+    float scroll_dx, float scroll_dy) {
+
+    InputState& inp = doc.input;
     inp.mouse_x = local_x;
     inp.mouse_y = local_y;
     inp.held = btn;
@@ -207,9 +203,11 @@ inline void fire_with_context(
 }
 
 inline void fire_key_context(
+    Document& doc,
     INode* impl, WeakNode handle,
     Event type, int vkey, bool repeat, Modifiers mods) {
-    InputState& inp = CORE.input;
+
+    InputState& inp = doc.input;
     inp.key_vkey = vkey;
     inp.key_repeat = repeat;
     inp.key_char = L'\0';
@@ -221,9 +219,11 @@ inline void fire_key_context(
 }
 
 inline void fire_char_context(
+    Document& doc,
     INode* impl, WeakNode handle,
     wchar_t ch, Modifiers mods) {
-    InputState& inp = CORE.input;
+
+    InputState& inp = doc.input;
     inp.key_char = ch;
     inp.key_vkey = 0;
     inp.key_repeat = false;

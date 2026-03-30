@@ -5,14 +5,11 @@
 
 namespace lintel {
 
+template class Impl<INode>;
+
 // ===========================================================================
-// Layout accessors - read from attr with typed defaults
+// Layout accessors
 // ===========================================================================
-//
-// Enum-valued property::s (Direction, Align, Justify) are stored as float (integer
-// cast) in the attribute map - the same convention used by TextAlign - because
-// AttribValue has no enum slot.  The accessors cast back on read.
-//
 
 float INode::layout_width()  const {
     return attr.get_or<float>(property::Width, nan_f());
@@ -92,17 +89,20 @@ Node* INode::find_hit(Node& self, float sx, float sy) {
 void INode::update_hover(WeakNode self, float sx, float sy) {
     const bool now_inside = (sx >= rect.x && sx <= rect.x + rect.w &&
                              sy >= rect.y && sy <= rect.y + rect.h);
-    const Modifiers mods = CORE.input.modifiers;
+
+    // Use our own document pointer; nodes outside a document are never hovered.
+    if (!doc_) return;
+    const Modifiers mods = doc_->input.modifiers;
 
     if (now_inside && !mouse_inside) {
         mouse_inside = true;
-        fire_with_context(this, self, Event::MouseEnter,
+        fire_with_context(*doc_, this, self, Event::MouseEnter,
                           sx - content_x(), sy - content_y(),
                           MouseButton::None, mods);
     }
     else if (!now_inside && mouse_inside) {
         mouse_inside = false;
-        fire_with_context(this, self, Event::MouseLeave,
+        fire_with_context(*doc_, this, self, Event::MouseLeave,
                           sx - content_x(), sy - content_y(),
                           MouseButton::None, mods);
     }
@@ -111,14 +111,23 @@ void INode::update_hover(WeakNode self, float sx, float sy) {
         child.handle<INode>()->update_hover(WeakNode(child), sx, sy);
 }
 
-void INode::bubble_up(INode* from_impl, Event type) {
-    WeakNode cursor = from_impl->parent;
+// ---------------------------------------------------------------------------
+// bubble_up
+// ---------------------------------------------------------------------------
+//
+// Re-fires an already-dispatched event up the ancestor chain, adjusting
+// mouse_x/y at each step.  Uses doc_ inherited from the originating node.
+
+void INode::bubble_up(Event type) {
+    if (!doc_) return;
+
+    WeakNode cursor = parent;
     while (cursor) {
         INode* ancestor = cursor.handle<INode>();
         if (!ancestor) break;
 
-        CORE.input.mouse_x = CORE.input.mouse_screen_x - ancestor->content_x();
-        CORE.input.mouse_y = CORE.input.mouse_screen_y - ancestor->content_y();
+        doc_->input.mouse_x = doc_->input.mouse_screen_x - ancestor->content_x();
+        doc_->input.mouse_y = doc_->input.mouse_screen_y - ancestor->content_y();
 
         ancestor->invoke_handlers(cursor, type);
         cursor = ancestor->parent;
@@ -129,53 +138,11 @@ void INode::bubble_up(INode* from_impl, Event type) {
 // INode - focus utilities
 // ===========================================================================
 
-void INode::set_focus(WeakNode target) {
-    FocusState& fs = CORE.focus;
-    if (fs.focused == target) return;
-
-    if (fs.focused) {
-        INode* prev = fs.focused.handle<INode>();
-        if (prev)
-            fire_with_context(prev, fs.focused, Event::Blur,
-                              0.f, 0.f, MouseButton::None, {});
-    }
-
-    fs.focused = target;
-
-    if (fs.focused) {
-        INode* next = fs.focused.handle<INode>();
-        if (next)
-            fire_with_context(next, fs.focused, Event::Focus,
-                              0.f, 0.f, MouseButton::None, {});
-    }
-}
-
-void INode::collect_focusable(INode* node, std::vector<INode*>& out) {
+/*static*/ void INode::collect_focusable(INode* node, std::vector<INode*>& out) {
     if (!node) return;
     if (node->focusable_flag) out.push_back(node);
     for (Node& child : node->children)
         collect_focusable(child.handle<INode>(), out);
-}
-
-void INode::focus_next(Node& tree_root) {
-    std::vector<INode*> focusable;
-    collect_focusable(tree_root.handle<INode>(), focusable);
-    if (focusable.empty()) return;
-
-    INode* current = CORE.focus.focused.handle<INode>();
-    if (!current) {
-        set_focus(WeakNode(static_cast<void*>(focusable.front())));
-        return;
-    }
-
-    for (size_t i = 0; i < focusable.size(); ++i) {
-        if (focusable[i] == current) {
-            set_focus(WeakNode(static_cast<void*>(
-                focusable[(i + 1) % focusable.size()])));
-            return;
-        }
-    }
-    set_focus(WeakNode(static_cast<void*>(focusable.front())));
 }
 
 // ===========================================================================
@@ -183,13 +150,6 @@ void INode::focus_next(Node& tree_root) {
 // ===========================================================================
 
 void INode::measure(float avail_w, float avail_h) {
-    // ── Early exit: nothing changed since the last layout pass ────────────
-    //
-    // Skip the subtree when:
-    //   1. No box-model / layout-behavior property:: has been written.
-    //   2. No tween is currently animating a layout property:: on this subtree.
-    //   3. The parent is offering exactly the same available space.
-    //
     if (!attr.layout_dirty &&
         !has_active_tweens_ &&
         avail_w == cached_avail_w_ &&
@@ -216,8 +176,6 @@ void INode::measure(float avail_w, float avail_h) {
     const float cross_avail = is_col ? inner_w() : inner_h();
     const float main_avail = is_col ? inner_h() : inner_w();
 
-    // Give each child a preliminary size so the parent's auto dimension can
-    // be resolved in the shrink-wrap pass below.
     for (Node& child : children) {
         INode* ci = child.handle<INode>();
         const bool fixed_main = is_col ? !is_auto(ci->layout_height())
@@ -228,7 +186,6 @@ void INode::measure(float avail_w, float avail_h) {
             ci->measure(fixed_main ? main_avail : 0.f, cross_avail);
     }
 
-    // Shrink-wrap our own auto main-axis dimension to the sum of fixed children.
     if (is_auto(is_col ? layout_height() : layout_width())) {
         const Edges padding = layout_padding();
         const int   n = static_cast<int>(children.size());
@@ -257,6 +214,7 @@ void INode::measure(float avail_w, float avail_h) {
     cached_avail_h_ = avail_h;
     attr.layout_dirty = false;
 }
+
 void INode::arrange(float slot_x, float slot_y) {
     const Edges margin = layout_margin();
     rect.x = slot_x + margin.left;
@@ -282,7 +240,6 @@ void INode::arrange_column() {
     const int   n = static_cast<int>(children.size());
     const float gap_val = layout_gap();
 
-    // -- Pass 1: fixed vs share children ----------------------------------
     float fixed_main = gap_val * std::max(0, n - 1);
     float total_shares = 0.f;
 
@@ -295,8 +252,6 @@ void INode::arrange_column() {
     }
 
     const float share_pool = std::max(0.f, ih - fixed_main);
-
-    // -- Pass 2: place children -------------------------------------------
 
     if (total_shares > 0.f) {
         float cursor = content_y();
@@ -313,16 +268,12 @@ void INode::arrange_column() {
     }
     else {
         const float free_h = ih - fixed_main;
-        float cursor = content_y();
-        float extra_gap = 0.f;
+        float       cursor = content_y();
+        float       extra_gap = 0.f;
 
         switch (layout_justify()) {
-            case Justify::Center:
-                cursor += free_h * 0.5f;
-                break;
-            case Justify::End:
-                cursor += free_h;
-                break;
+            case Justify::Center:      cursor += free_h * 0.5f;           break;
+            case Justify::End:         cursor += free_h;                   break;
             case Justify::SpaceBetween:
                 if (n > 1) extra_gap = free_h / static_cast<float>(n - 1);
                 break;
@@ -330,14 +281,14 @@ void INode::arrange_column() {
                 extra_gap = free_h / static_cast<float>(n);
                 cursor += extra_gap * 0.5f;
                 break;
-            default:
-                break;
+            default: break;
         }
 
         for (Node& child : children) {
             INode* ci = child.handle<INode>();
             ci->arrange(resolve_cross_x(ci, iw), cursor);
-            cursor += ci->rect.h + ci->layout_margin().vertical() + gap_val + extra_gap;
+            cursor += ci->rect.h + ci->layout_margin().vertical()
+                + gap_val + extra_gap;
         }
     }
 }
@@ -352,7 +303,6 @@ void INode::arrange_row() {
     const int   n = static_cast<int>(children.size());
     const float gap_val = layout_gap();
 
-    // -- Pass 1: fixed vs share children ----------------------------------
     float fixed_main = gap_val * std::max(0, n - 1);
     float total_shares = 0.f;
 
@@ -365,8 +315,6 @@ void INode::arrange_row() {
     }
 
     const float share_pool = std::max(0.f, iw - fixed_main);
-
-    // -- Pass 2: place children -------------------------------------------
 
     if (total_shares > 0.f) {
         float cursor = content_x();
@@ -383,16 +331,12 @@ void INode::arrange_row() {
     }
     else {
         const float free_w = iw - fixed_main;
-        float cursor = content_x();
-        float extra_gap = 0.f;
+        float       cursor = content_x();
+        float       extra_gap = 0.f;
 
         switch (layout_justify()) {
-            case Justify::Center:
-                cursor += free_w * 0.5f;
-                break;
-            case Justify::End:
-                cursor += free_w;
-                break;
+            case Justify::Center:      cursor += free_w * 0.5f;           break;
+            case Justify::End:         cursor += free_w;                   break;
             case Justify::SpaceBetween:
                 if (n > 1) extra_gap = free_w / static_cast<float>(n - 1);
                 break;
@@ -400,20 +344,20 @@ void INode::arrange_row() {
                 extra_gap = free_w / static_cast<float>(n);
                 cursor += extra_gap * 0.5f;
                 break;
-            default:
-                break;
+            default: break;
         }
 
         for (Node& child : children) {
             INode* ci = child.handle<INode>();
             ci->arrange(cursor, resolve_cross_y(ci, ih));
-            cursor += ci->rect.w + ci->layout_margin().horizontal() + gap_val + extra_gap;
+            cursor += ci->rect.w + ci->layout_margin().horizontal()
+                + gap_val + extra_gap;
         }
     }
 }
 
 // ---------------------------------------------------------------------------
-// Cross-axis position resolvers
+// Cross-axis resolution helpers
 // ---------------------------------------------------------------------------
 
 float INode::resolve_cross_x(INode* ci, float iw) {
@@ -474,21 +418,21 @@ void INode::draw_default(Canvas& canvas) {
 // ===========================================================================
 // Node - constructors / destructor / move
 // ===========================================================================
+//
+// The destructor no longer calls CORE.clear_node() directly.  That cleanup
+// now happens inside INode::~INode() via the doc_ back-pointer, so the Node
+// shell has no special teardown work to do.
 
 Node::Node() { impl_allocate(); }
 Node::Node(std::nullptr_t) {}
-
-Node::~Node() {
-    if (iptr_)
-        CORE.clear_node(iptr_);
-}
+Node::~Node() = default;
 
 Node::Node(Node&& other) noexcept
     : Impl<INode>(std::move(other)) {}
 
 Node& Node::operator=(Node&& other) noexcept {
     if (this != &other) {
-        if (iptr_) CORE.clear_node(iptr_);
+        iptr_->doc_->stamp_document(other.handle(), iptr_->doc_);
         Impl<INode>::operator=(std::move(other));
     }
     return *this;
@@ -497,23 +441,38 @@ Node& Node::operator=(Node&& other) noexcept {
 // ===========================================================================
 // Node - tree mutation
 // ===========================================================================
+//
+// push() stamps doc_ on newly-adopted nodes so they immediately participate
+// in document cleanup and event dispatch.
+//
+// remove() clears doc_ on the departing subtree so detached nodes never
+// fire into a document that no longer owns them.
 
 Node& Node::push() {
     Node& child = iptr_->children.emplace_back();
-    child.handle<INode>()->parent = *this;
+    INode* ci = child.handle<INode>();
+    ci->parent = *this;
+    ci->doc_ = iptr_->doc_;            // inherit document
     return child;
 }
 
 Node& Node::push(Node&& incoming) {
     if (!incoming) return *this;
 
-    if (incoming.handle<INode>()->parent) {
-        WeakNode old_parent = incoming.handle<INode>()->parent;
+    INode* inc = incoming.handle<INode>();
+
+    if (inc->parent) {
+        WeakNode old_parent = inc->parent;
         old_parent->remove(incoming);
     }
 
     iptr_->children.push_back(std::move(incoming));
-    iptr_->children.back().handle<INode>()->parent = *this;
+    INode* ci = iptr_->children.back().handle<INode>();
+    ci->parent = *this;
+
+    // Stamp the whole incoming subtree with this document.
+    Document::stamp_document(ci, iptr_->doc_);
+
     return iptr_->children.back();
 }
 
@@ -525,8 +484,11 @@ Node Node::remove(Node& child) {
         if (vec[i].handle<INode>() == child.handle<INode>()) {
             Node owner = std::move(vec[i]);
             vec.erase(vec.begin() + static_cast<std::ptrdiff_t>(i));
-            if (INode* oi = owner.handle<INode>())
+            if (INode* oi = owner.handle<INode>()) {
                 oi->parent.reset();
+                // Detach the subtree from the document.
+                Document::stamp_document(oi, nullptr);
+            }
             return owner;
         }
     }
@@ -542,12 +504,6 @@ Node* Node::child(size_t index) {
 // ===========================================================================
 // Node - style / layout setters (fluent)
 // ===========================================================================
-//
-// Every setter writes to attr using the canonical property:: key.  This is the
-// single path shared by the programmatic API, the parser, and event-delta
-// handlers.  layout_dirty is set automatically by Attributes::set() for the
-// box-model and layout-behavior property::erties.
-//
 
 Attributes& Node::attr() { return iptr_->attr; }
 Node& Node::attr(const Attributes& s) { iptr_->attr = s; return *this; }
@@ -601,6 +557,47 @@ Node& Node::focusable(bool f) { iptr_->focusable_flag = f; return *this; }
 Node& Node::draggable(bool d) { iptr_->draggable_flag = d; return *this; }
 
 // ===========================================================================
+// Node - children
+// ===========================================================================
+
+Node& Node::clear_children() {
+    // Destroying each child Node fires INode::~INode → doc_->clear_node(),
+    // which nulls out focused / hovered / pressed refs in the document.
+    iptr_->children.clear();
+    iptr_->attr.layout_dirty = true;
+    return *this;
+}
+
+// ===========================================================================
+// Node - animation
+// ===========================================================================
+
+Node& Node::transition(Property p, float duration, Easing easing) {
+    iptr_->transitions_[p] = TransitionSpec{ duration, easing };
+    return *this;
+}
+
+Node& Node::animate(Property p, float target) {
+    iptr_->animate_prop(p, PropValue(target));
+    return *this;
+}
+
+Node& Node::animate(Property p, Color target) {
+    iptr_->animate_prop(p, PropValue(target));
+    return *this;
+}
+
+Node& Node::animate(Property p, float target, float duration, Easing easing) {
+    iptr_->animate_prop(p, target, duration, easing);
+    return *this;
+}
+
+Node& Node::animate(Property p, Color target, float duration, Easing easing) {
+    iptr_->animate_prop(p, target, duration, easing);
+    return *this;
+}
+
+// ===========================================================================
 // Node - event binding
 // ===========================================================================
 
@@ -617,9 +614,14 @@ void Node::clear_on_of(Event type) {
 // Node - query
 // ===========================================================================
 
-Rect  Node::rect()    const { return iptr_->rect; }
-float Node::mouse_x() const { return CORE.input.mouse_screen_x - iptr_->content_x(); }
-float Node::mouse_y() const { return CORE.input.mouse_screen_y - iptr_->content_y(); }
+Rect Node::rect() const { return iptr_->rect; }
+
+float Node::mouse_x() const { return iptr_->rect.x - iptr_->doc_->input.mouse_screen_x; }
+float Node::mouse_y() const { return iptr_->rect.y - iptr_->doc_->input.mouse_screen_y; }
+
+// ===========================================================================
+// Easing
+// ===========================================================================
 
 static float ease(float t, Easing e) noexcept {
     t = (t < 0.f) ? 0.f : (t > 1.f) ? 1.f : t;
@@ -634,23 +636,16 @@ static float ease(float t, Easing e) noexcept {
             const float c8 = std::cos(8.f * t);
             return 1.f - e6 * c8;
         }
-        default: return t; // Linear
+        default: return t;
     }
 }
 
-// ---------------------------------------------------------------------------
-// animate_prop_impl - shared tween construction
-// ---------------------------------------------------------------------------
-//
-// Finds or creates the TransitionSpec, cancels any existing tween for the
-// property, and pushes a new Tween onto the node's list.
-//
-// The 'duration' parameter takes precedence over any node-level transition
-// spec; pass -1.f to use the node-level spec (or snap if none).
+// ===========================================================================
+// animate_prop_impl
+// ===========================================================================
 
 void INode::animate_prop_impl(Property p, float target,
                               float duration, Easing easing) {
-    // Cancel any existing tween for this property.
     tweens_.erase(std::remove_if(tweens_.begin(), tweens_.end(),
                   [p] (const Tween& tw) { return tw.prop == p; }), tweens_.end());
 
@@ -685,46 +680,29 @@ void INode::animate_prop_impl(Property p, Color target,
     has_active_tweens_ = true;
 }
 
-// ---------------------------------------------------------------------------
-// animate_prop - primary overload (PropValue target, node-level spec)
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// animate_prop
+// ===========================================================================
 
 void INode::animate_prop(Property p, const PropValue& target) {
     const float* fp = std::get_if<float>(&target);
     const Color* cp = std::get_if<Color>(&target);
 
-    // Non-interpolable types (bool, wstring): snap immediately.
     if (!fp && !cp) {
         attr.set(p, target);
         return;
     }
 
-    // Look up node-level transition spec.
     auto spec_it = transitions_.find(p);
     if (spec_it == transitions_.end()) {
-        // No spec: snap.
         attr.set(p, target);
         return;
     }
 
     const TransitionSpec& spec = spec_it->second;
-
     if (fp) animate_prop_impl(p, *fp, spec.duration, spec.easing);
     else    animate_prop_impl(p, *cp, spec.duration, spec.easing);
 }
-
-// ---------------------------------------------------------------------------
-// animate_prop - per-call duration / easing overloads
-// ---------------------------------------------------------------------------
-//
-// These replace the old AnimateDescriptor path.  Use them when the animation
-// parameters are determined at the call site rather than being declared in the
-// .lintel file's transition block.
-//
-// Example:
-//   impl->animate_prop(property::BackgroundColor,
-//                      Color(0.2f, 0.6f, 1.f, 1.f),
-//                      0.3f, Easing::Spring);
 
 void INode::animate_prop(Property p, float target,
                          float duration, Easing easing) {
@@ -736,9 +714,9 @@ void INode::animate_prop(Property p, Color target,
     animate_prop_impl(p, target, duration, easing);
 }
 
-// ---------------------------------------------------------------------------
-// tick_tweens - unchanged except PropValue is used in attr.set() calls
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// tick_tweens
+// ===========================================================================
 
 void INode::tick_tweens(float dt) {
     has_active_tweens_ = false;
@@ -751,8 +729,7 @@ void INode::tick_tweens(float dt) {
         const float t = ease(done ? 1.f : raw_t, it->easing);
 
         if (auto* ff = std::get_if<std::pair<float, float>>(&it->range)) {
-            const float v = ff->first + (ff->second - ff->first) * t;
-            attr.set(it->prop, v);   // PropValue constructed from float
+            attr.set(it->prop, ff->first + (ff->second - ff->first) * t);
         }
         else if (auto* cc = std::get_if<std::pair<Color, Color>>(&it->range)) {
             const Color& a = cc->first;
@@ -779,13 +756,13 @@ void INode::tick_tweens(float dt) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// apply - snap write, fires apply_notifier
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// apply
+// ===========================================================================
 
 void INode::apply(Property p, PropValue val) {
     attr.set(p, val);
-    apply_notifier(p);
+    apply_callback(p);
 }
 
 } // namespace lintel

@@ -1,21 +1,9 @@
 // load.cpp - parse → resolve → build StyleSheet → build scene graph.
-//
-// Previous responsibilities (now moved):
-//   • apply_one_prop / animate_one_prop   → StyleSheet::dispatch_prop()
-//   • install_transition                  → stylesheet.cpp
-//   • parse_edges                         → stylesheet.cpp
-//   • ResolvedProps + wire_event          → StyleSheet::Style / wire_handlers()
-//
-// This file now only orchestrates three passes:
-//   1. Parse the source file (Parser → AST)
-//   2. Collect variables and named styles into a StyleSheet (StyleResolver)
-//   3. Walk the AST NodeDecls and build the runtime scene graph (TreeBuilder)
 
 #include "visitor.h"
 #include "parser.h"
 #include "inode.h"
 #include "framework.h"
-#include "stylesheet.h"
 
 #include <charconv>
 #include <cwctype>
@@ -25,7 +13,6 @@
 #include <string>
 #include <unordered_map>
 #include <optional>
-
 
 namespace lintel::parser {
 
@@ -194,7 +181,7 @@ static StyleSheet build_stylesheet(const AST& ast, const StyleResolver& res) {
 //   4. Event handlers    (from both styles and local OnDecls)
 
 class TreeBuilder {
-    const StyleSheet& sheet_;
+    StyleSheet& sheet_;
     const StyleResolver& res_;
 
     void build(lintel::Node& parent, const NodeDecl& decl,
@@ -260,11 +247,11 @@ class TreeBuilder {
 
         // 7. Register named nodes for cross-reference via find().
         if (!decl.name.empty())
-            CORE.register_named(decl.name, WeakNode(n.handle()));
+            sheet_.register_node(decl.name, WeakNode(n.handle()));
     }
 
 public:
-    TreeBuilder(const StyleSheet& sheet, const StyleResolver& res)
+    TreeBuilder(StyleSheet& sheet, const StyleResolver& res)
         : sheet_(sheet), res_(res) {}
 
     void run(lintel::Node& root, const AST& ast) {

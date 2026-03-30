@@ -1,8 +1,11 @@
 
+red = #FF0000
+blue = #00FF00
+black = #000000
+
 root:
-	text "txt":
-		editable = true
-		scrollbar = true
-		border-weight = 1
-		border-color = #FF0000
-		height = 100
+	align = center
+	justify = center
+	graph:
+		width = 500
+		height = 500

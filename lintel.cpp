@@ -108,23 +108,4 @@ Edges::Edges(float x_axis, float y_axis) noexcept
 float Edges::horizontal() const { return left + right; }
 float Edges::vertical()   const { return top + bottom; }
 
-// ---------------------------------------------------------------------------
-// Query
-// ---------------------------------------------------------------------------
-
-Node& root() { return CORE.root; }
-
-float mouse_x() { return CORE.input.mouse_screen_x; }
-float mouse_y() { return CORE.input.mouse_screen_y; }
-
-MouseButton held_button() { return CORE.input.held; }
-Modifiers   modifiers() { return CORE.input.modifiers; }
-int         key_vkey() { return CORE.input.key_vkey; }
-bool        key_repeat() { return CORE.input.key_repeat; }
-wchar_t     key_char() { return CORE.input.key_char; }
-float       scroll_dx() { return CORE.input.scroll_dx; }
-float       scroll_dy() { return CORE.input.scroll_dy; }
-
-WeakNode find(const char* name) { return CORE.get_named(name); }
-
 } // namespace lintel

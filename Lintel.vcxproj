@@ -161,7 +161,6 @@
     <ClInclude Include="iwindow.h" />
     <ClInclude Include="lexer.h" />
     <ClInclude Include="lintel.h" />
-    <ClInclude Include="stylesheet.h" />
     <ClInclude Include="types.h" />
     <ClInclude Include="visitor.h" />
   </ItemGroup>

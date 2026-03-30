@@ -85,7 +85,7 @@ void ITextNode::sync_style() {
     }
 }
 
-void ITextNode::apply_notifier(Property p) {
+void ITextNode::apply_callback(Property p) {
     // TODO: cache
     if (p == FRAMEWORK.get_property("content")) {
         if (auto* str = attr.get<std::wstring>(p)) {
@@ -137,7 +137,7 @@ void ITextNode::wire_events(Node& handle) {
         }
 
         lmb_selecting = true;
-        on_click_position(mx, my, modifiers().shift);
+        on_click_position(mx, my, doc_->input.modifiers.shift);
     });
 
     handle.on(Event::MouseMove, [this] (WeakNode self) {
@@ -162,16 +162,16 @@ void ITextNode::wire_events(Node& handle) {
 
     handle.on(Event::Char, [this] (WeakNode) {
         if (!editable || !has_focus) return;
-        on_input(key_char());
+        on_input(doc_->input.key_char);
     });
 
     handle.on(Event::KeyDown, [this] (WeakNode) {
         if (!has_focus) return;
 
-        const bool shift = modifiers().shift;
-        const bool ctrl = modifiers().ctrl;
+        const bool shift = doc_->input.modifiers.shift;
+        const bool ctrl = doc_->input.modifiers.ctrl;
 
-        switch (key_vkey()) {
+        switch (doc_->input.key_vkey) {
             case VK_BACK:   if (editable) on_backspace(); break;
             case VK_DELETE: if (editable) on_delete();    break;
 
@@ -215,7 +215,7 @@ void ITextNode::wire_events(Node& handle) {
 void ITextNode::ensure_format() {
     if (fmt) return;
 
-    fmt = CORE.canvas.make_text_format(
+    fmt = CANVAS.make_text_format(
         font_family.c_str(), font_size, bold, italic_val, wrap);
 
     if (fmt) {
@@ -231,7 +231,7 @@ void ITextNode::ensure_format() {
 
 ComPtr<IDWriteTextLayout> ITextNode::make_layout(float max_w, float max_h) const {
     if (!fmt || content.empty()) return {};
-    return CORE.canvas.make_text_layout(
+    return CANVAS.make_text_layout(
         content.c_str(), static_cast<uint32_t>(content.size()),
         fmt.Get(), max_w, max_h);
 }

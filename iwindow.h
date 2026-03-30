@@ -35,6 +35,7 @@ namespace lintel {
 class IWindow {
 public:
     HWND hwnd = nullptr;
+    Document doc;
 
     std::function<void()>        thread_main;
 

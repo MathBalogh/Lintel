@@ -6,36 +6,28 @@
 #define NOMINMAX
 #include <Windows.h>
 
-#include <iostream> // debug
 #include <atomic>
-#include <condition_variable>
+#include <functional>
 #include <mutex>
 #include <queue>
 #include <thread>
+#include <unordered_map>
 
-#include "gpu.h"
 #include "canvas.h"
-
-// Shortcuts to the singleton and its GPU / Canvas contexts.
-#define CORE Core::get()
-#define GPU  (Core::get().gpu)
 
 namespace lintel {
 
 // ---------------------------------------------------------------------------
 // InputState
 // ---------------------------------------------------------------------------
-//
-// Written by Core::process_message immediately before firing an event.
-// Handlers read these via the Node query methods (mouse_x(), key_vkey(), …).
-//
+
 struct InputState {
-    float mouse_x = 0.f; // Relative to the node under dispatch.
+    float mouse_x = 0.f;
     float mouse_y = 0.f;
-    float mouse_screen_x = 0.f; // Relative to the window client area.
+    float mouse_screen_x = 0.f;
     float mouse_screen_y = 0.f;
-    float scroll_dx = 0.f; // Horizontal wheel delta (positive = right).
-    float scroll_dy = 0.f; // Vertical   wheel delta (positive = up).
+    float scroll_dx = 0.f;
+    float scroll_dy = 0.f;
 
     MouseButton held = MouseButton::None;
     Modifiers   modifiers = {};
@@ -50,8 +42,8 @@ struct InputState {
 // ---------------------------------------------------------------------------
 
 struct FocusState {
-    WeakNode focused; // Node currently holding keyboard focus.
-    WeakNode hovered; // Topmost node currently under the cursor.
+    WeakNode focused;
+    WeakNode hovered;
 };
 
 // ---------------------------------------------------------------------------
@@ -59,20 +51,19 @@ struct FocusState {
 // ---------------------------------------------------------------------------
 
 struct PointerState {
-    // Minimum cursor travel (px) before a press becomes a drag.
     static constexpr float k_drag_threshold = 4.f;
 
-    WeakNode    pressed = {};             // Node where the last button was pressed.
+    WeakNode    pressed = {};
     MouseButton press_btn = MouseButton::None;
-    float       press_sx = 0.f;           // Screen coords of the press.
+    float       press_sx = 0.f;
     float       press_sy = 0.f;
 
-    bool     drag_pending = false;         // Press recorded; threshold not yet crossed.
-    bool     drag_active = false;         // Drag sequence in progress.
-    WeakNode drag_src = {};
+    bool        drag_pending = false;
+    bool        drag_active = false;
+    WeakNode    drag_src = {};
     MouseButton drag_btn = MouseButton::None;
 
-    WeakNode  last_click_node = {};        // For double-click detection.
+    WeakNode  last_click_node = {};
     ULONGLONG last_click_ms = 0;
     float     last_click_sx = 0.f;
     float     last_click_sy = 0.f;
@@ -89,63 +80,86 @@ struct WindowMessage {
 };
 
 // ---------------------------------------------------------------------------
-// Core
+// Document
 // ---------------------------------------------------------------------------
 //
-// Singleton that owns the GPU context, the Canvas drawing abstraction, and all
-// global input / focus / pointer state.
-// Member declaration order matters: gpu must precede canvas because Canvas
-// stores a GpuContext& that is bound at construction time.
+// Owns everything that belongs to one UI scene: the root node, all input /
+// focus / pointer state, the named-node registry, the message queue, and the
+// worker thread that drives layout → draw → present.
 //
-class Core {
+// One Window constructs one Document, sets Document::window, then calls
+// Document::start().  Win32 messages are forwarded via Document::push().
+//
+// Input dispatch
+// --------------
+// The public dispatch_* methods are the sole entry-points for injecting
+// synthetic or real input.  They mirror the Win32 messages that
+// process_message() handles internally, but with coordinates and button
+// identity already decoded so the caller (Window, test harness, …) does not
+// need to know anything about INode internals.
+//
+// Node ownership and document back-pointer
+// -----------------------------------------
+// Every INode holds a raw Document* (doc_) that is null until the node
+// enters the tree owned by this Document.  The pointer propagates
+// automatically: Document::bind_root() stamps the root and all existing
+// children; Node::push() stamps any newly-adopted node and its subtree.
+// Node::remove() clears the pointer on the subtree being detached.
+// INode::~INode calls Document::clear_node() through this pointer so that
+// no manual CORE global is needed.
+//
+class Document {
     std::thread               worker_;
     std::mutex                mut_;
     std::queue<WindowMessage> queue_;
     std::atomic<bool>         running_{ false };
 
     bool try_pop(WindowMessage& out);
-
     void process_message(UINT msg, WPARAM wp, LPARAM lp);
-    void process_default(); // Layout + draw + present.
+    void process_default();
+
 public:
-    Core();
-    ~Core();
+    Document();
+    ~Document();
 
-    static Core& get();
+    Document(const Document&) = delete;
+    Document& operator=(const Document&) = delete;
 
-    Core(const Core&) = delete;
-    Core& operator=(const Core&) = delete;
+    Canvas canvas;
 
-    GpuContext    gpu;
+    // -- Scene -----------------------------------------------------------
 
-    // Canvas must be declared after gpu so its GpuContext& reference is bound
-    // to an already-constructed object.  It is initialised in the Core
-    // constructor's member-initialiser list before gpu.initialize() is called;
-    // Canvas stores only the reference at that point so no GPU API is invoked
-    // during its own construction.
-    Canvas        canvas;
+    Node root;
 
-    InputState    input;
-    FocusState    focus;
-    PointerState  pointer;
+    // Stamp root (and any nodes already in the tree) with this document.
+    // Call once, after the initial scene is built and before start().
+    void bind_root();
 
-    WeakImpl<Window> window;
-    Node             root;
+    // -- Input state -----------------------------------------------------
 
-    // UI Delta-time in seconds
+    InputState   input;
+    FocusState   focus;
+    PointerState pointer;
+
     float ui_tick_dts = 0.0f;
 
+    // -- Named-node registry ---------------------------------------------
+
     std::unordered_map<std::string, WeakNode> named_nodes;
-    void register_named(std::string name, WeakNode node) {
+
+    void     register_named(std::string name, WeakNode node) {
         named_nodes[std::move(name)] = node;
     }
     WeakNode get_named(const std::string& name) {
-        if (auto it = named_nodes.find(name); it != named_nodes.end()) return it->second;
-        return WeakNode(nullptr);
+        auto it = named_nodes.find(name);
+        return it != named_nodes.end() ? it->second : WeakNode(nullptr);
     }
 
-    // Null out any weak references that point to node (called when a node
-    // is about to be destroyed).
+    // -- Weak-ref cleanup ------------------------------------------------
+    //
+    // Called from INode's destructor (via doc_) to null any document-level
+    // WeakNode references that point at the node being torn down.
+
     void clear_node(class INode* node) {
         if (focus.focused == node) focus.focused.reset();
         if (focus.hovered == node) focus.hovered.reset();
@@ -154,39 +168,73 @@ public:
         if (pointer.last_click_node == node) pointer.last_click_node.reset();
     }
 
-    // Thread-safe message enqueue (called from the Win32 message thread).
-    void push(WindowMessage m);
+    // -- Window back-pointer ---------------------------------------------
+    //
+    // Set by Window before start() is called.
+    WeakImpl<class IWindow> window;
 
-    // Start the worker thread.
-    void start();
+    // Optional per-frame callback (supplied by Window::run()).
+    std::function<void()> thread_tick;
 
-    // Stop the worker thread.
-    void shutdown();
+    // -- Public input dispatch -------------------------------------------
+    //
+    // These are the high-level interface that Window (and tests) call instead
+    // of raw process_message().  Each method performs hit-testing, fires the
+    // relevant events on the target node(s), and updates pointer/focus state.
+    //
+    // Coordinates are in client (window-local) pixels.
+
+    void dispatch_mouse_move(float sx, float sy, Modifiers mods);
+    void dispatch_mouse_leave();
+    void dispatch_mouse_down(float sx, float sy, MouseButton btn, Modifiers mods);
+    void dispatch_mouse_up(float sx, float sy, MouseButton btn, Modifiers mods);
+    void dispatch_scroll(float sx, float sy, float dx, float dy, Modifiers mods);
+    void dispatch_key_down(int vkey, bool repeat, Modifiers mods);
+    void dispatch_key_up(int vkey, Modifiers mods);
+    void dispatch_char(wchar_t ch, Modifiers mods);
+
+    // -- Focus control ---------------------------------------------------
+    //
+    // Set keyboard focus to an arbitrary node (or clear it with a null/empty
+    // WeakNode).  Fires Blur on the old focus and Focus on the new one.
+
+    void set_focus(WeakNode target);
+
+    // Advance focus to the next focusable node in document order (Tab).
+    void focus_next();
+
+    // -- Lifecycle -------------------------------------------------------
+
+    void push(WindowMessage m); // thread-safe, called from Win32 thread
+    void start();               // launch worker thread
+    void shutdown();            // stop worker thread (blocking)
+
+    // Recursively stamp every INode in a subtree with a document pointer.
+    static void stamp_document(class INode* node, Document* doc);
 };
 
 // ---------------------------------------------------------------------------
-// Fire helpers - forward declarations
+// Fire-helper forward declarations
 // ---------------------------------------------------------------------------
 //
-// INode is an incomplete type at this point in the translation unit.
-// The inline definitions live at the bottom of inode.h, which is always
-// included after core.h and sees the full INode definition.
+// Inline definitions live at the bottom of inode.h (where INode is complete).
+// Every helper takes Document& so it writes to the correct InputState.
 //
 
-// Mouse and scroll events.
 inline void fire_with_context(
+    Document& doc,
     class INode* impl, WeakNode handle,
     Event type, float local_x, float local_y,
     MouseButton btn, Modifiers mods,
-    float scroll_dx, float scroll_dy);
+    float scroll_dx = 0.f, float scroll_dy = 0.f);
 
-// KeyDown / KeyUp events.
 inline void fire_key_context(
+    Document& doc,
     class INode* impl, WeakNode handle,
     Event type, int vkey, bool repeat, Modifiers mods);
 
-// Char events.
 inline void fire_char_context(
+    Document& doc,
     class INode* impl, WeakNode handle,
     wchar_t ch, Modifiers mods);
 

@@ -16,14 +16,9 @@
 
 using Microsoft::WRL::ComPtr;
 
-// ---------------------------------------------------------------------------
-// GpuContext
-// ---------------------------------------------------------------------------
-//
-// Holds all Direct3D 11 / Direct2D / DirectWrite device objects.
-// Created once by Core and shared via the GPU macro.
-//
 struct GpuContext {
+    GpuContext();
+
     ComPtr<ID3D11Device>        d3d_device;
     ComPtr<ID3D11DeviceContext> d3d_context;
     ComPtr<ID2D1Factory1>       d2d_factory;
@@ -32,9 +27,11 @@ struct GpuContext {
     ComPtr<IDWriteFactory>      dwrite_factory;
     ComPtr<IWICImagingFactory>  wic_factory;
 
-    // Returns false if any device object failed to initialise.
+    static GpuContext& get();
+private:
     bool initialize();
 };
 
-// Evaluate an HRESULT; return false from the enclosing function on failure.
 #define HR_RET_F(expr) do { if (FAILED(expr)) { return false; } } while (0)
+
+#define GPU (GpuContext::get())

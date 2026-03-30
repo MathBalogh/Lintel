@@ -3,28 +3,9 @@
 //
 // Canvas - the single drawing surface every node renders through.
 //
-// Design goals
-// ------------
-//  • Nodes never touch a D2D / DWrite COM pointer directly.
-//  • The full Direct2D / DirectWrite API is hidden behind a plain C++ facade.
-//  • Swapping the back-end (Skia, software raster, mock) only requires
-//    reimplementing Canvas; no node code changes.
-//
-// Usage
-// -----
-//  Core::process_default() constructs a Canvas from its GpuContext and passes
-//  it by reference into the root INode::draw() call.  Each node forwards the
-//  same Canvas& to its children so a single instance is shared for the whole
-//  frame.
-//
-//  For operations that must persist outside the draw pass - specifically the
-//  DWrite text formats and layouts in ITextNode - Canvas is also accessible
-//  via CORE.canvas so that measure() and event handlers can call the factory
-//  methods without receiving a Canvas& parameter.
-//
 
-#include "gpu.h"
 #include "lintel.h"   // Rect, Color, ComPtr
+#include "gpu.h"
 
 #include <string_view>
 
@@ -32,8 +13,6 @@ namespace lintel {
 
 class Canvas {
 public:
-    explicit Canvas(GpuContext& gpu) noexcept;
-
     // -- Filled shapes -------------------------------------------------------
 
     // Fill a rectangle with an optional uniform corner radius.
@@ -117,14 +96,15 @@ public:
         float              max_w,
         float              max_h) const;
 
+    static Canvas& get();
 private:
-    GpuContext& gpu_;
-
-    ID2D1DeviceContext* dc() const noexcept { return gpu_.d2d_context.Get(); }
+    ID2D1DeviceContext* dc() const noexcept { return GPU.d2d_context.Get(); }
 
     // Convert our Rect {x, y, w, h} into Direct2D's {left, top, right, bottom}.
     static D2D1_RECT_F        to_d2df(const Rect& r)               noexcept;
     static D2D1_ROUNDED_RECT  to_d2d_rr(const Rect& r, float radius) noexcept;
 };
+
+#define CANVAS (Canvas::get())
 
 } // namespace lintel

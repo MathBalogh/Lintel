@@ -2,11 +2,10 @@
 
 namespace lintel {
 
-// ---------------------------------------------------------------------------
-// Constructor
-// ---------------------------------------------------------------------------
-
-Canvas::Canvas(GpuContext& gpu) noexcept: gpu_(gpu) {}
+Canvas& Canvas::get() {
+    static Canvas instance;
+    return instance;
+}
 
 // ---------------------------------------------------------------------------
 // Private geometry converters
@@ -86,7 +85,7 @@ ComPtr<ID2D1Bitmap> Canvas::load_bitmap(std::string_view path) const {
     std::wstring wpath(path.begin(), path.end());
 
     ComPtr<IWICBitmapDecoder> decoder;
-    if (FAILED(gpu_.wic_factory->CreateDecoderFromFilename(
+    if (FAILED(GPU.wic_factory->CreateDecoderFromFilename(
         wpath.c_str(), nullptr, GENERIC_READ,
         WICDecodeMetadataCacheOnLoad, &decoder)))
         return {};
@@ -95,7 +94,7 @@ ComPtr<ID2D1Bitmap> Canvas::load_bitmap(std::string_view path) const {
     if (FAILED(decoder->GetFrame(0, &frame))) return {};
 
     ComPtr<IWICFormatConverter> converter;
-    if (FAILED(gpu_.wic_factory->CreateFormatConverter(&converter))) return {};
+    if (FAILED(GPU.wic_factory->CreateFormatConverter(&converter))) return {};
 
     if (FAILED(converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppPBGRA,
         WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeMedianCut)))
@@ -140,18 +139,18 @@ ComPtr<ID2D1SolidColorBrush> Canvas::make_brush(Color c) const {
 ComPtr<ID2D1StrokeStyle> Canvas::make_stroke_style(
     const D2D1_STROKE_STYLE_PROPERTIES& props) const {
     ComPtr<ID2D1StrokeStyle> style;
-    if (gpu_.d2d_factory)
-        gpu_.d2d_factory->CreateStrokeStyle(props, nullptr, 0, &style);
+    if (GPU.d2d_factory)
+        GPU.d2d_factory->CreateStrokeStyle(props, nullptr, 0, &style);
     return style;
 }
 
 ComPtr<IDWriteTextFormat> Canvas::make_text_format(
     const wchar_t* family, float size,
     bool bold, bool italic, bool word_wrap) const {
-    if (!gpu_.dwrite_factory) return {};
+    if (!GPU.dwrite_factory) return {};
 
     ComPtr<IDWriteTextFormat> fmt;
-    gpu_.dwrite_factory->CreateTextFormat(
+    GPU.dwrite_factory->CreateTextFormat(
         family, nullptr,
         bold ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_REGULAR,
         italic ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL,
@@ -167,10 +166,10 @@ ComPtr<IDWriteTextFormat> Canvas::make_text_format(
 ComPtr<IDWriteTextLayout> Canvas::make_text_layout(
     const wchar_t* text, uint32_t len,
     IDWriteTextFormat* fmt, float max_w, float max_h) const {
-    if (!gpu_.dwrite_factory || !fmt || len == 0) return {};
+    if (!GPU.dwrite_factory || !fmt || len == 0) return {};
 
     ComPtr<IDWriteTextLayout> layout;
-    gpu_.dwrite_factory->CreateTextLayout(text, len, fmt, max_w, max_h, &layout);
+    GPU.dwrite_factory->CreateTextLayout(text, len, fmt, max_w, max_h, &layout);
     return layout;
 }
 

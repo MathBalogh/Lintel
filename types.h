@@ -153,30 +153,12 @@ struct Color {
 // ---------------------------------------------------------------------------
 // AnimateDescriptor
 // ---------------------------------------------------------------------------
-//
-// Kept as a standalone struct for future use by an animate() API.
-// Removed from PropValue - passing animation overrides through the attribute
-// map was the wrong abstraction: it inflated every stored value and made the
-// hot array unnecessarily large.  Per-call overrides are now passed as
-// separate arguments to INode::animate_prop().
 
 struct AnimateDescriptor {
     std::variant<float, Color> target;
     float  duration = 0.15f;
     Easing easing = Easing::EaseOut;
 };
-
-// ---------------------------------------------------------------------------
-// PropValue  (was AttribValue)
-// ---------------------------------------------------------------------------
-//
-// The value type stored in Attributes and StyleSheet.
-// AnimateDescriptor is no longer a variant member - it lived here only to
-// support the (still-commented-out) animate() value function, and its 24-byte
-// footprint was the single largest contributor to Attributes bloat.
-//
-// AttribValue is kept as an alias so callers written against the old name
-// continue to compile without modification.
 
 using PropValue = std::variant<float, Color, bool, std::wstring>;
 using AttribValue = PropValue;   // backward-compat alias

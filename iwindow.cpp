@@ -17,6 +17,7 @@ namespace lintel {
 // worker thread where it is serialised by the message queue.
 //
 
+static IWindow* this_win = nullptr;
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
         case WM_DESTROY:
@@ -28,7 +29,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return 1;
     }
 
-    CORE.push({ msg, wp, lp });
+    this_win->doc.push({ msg, wp, lp });
+
     return DefWindowProc(hwnd, msg, wp, lp);
 }
 
@@ -38,6 +40,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
 Window::Window() {
     impl_allocate();
+    this_win = iptr_;
 
     // -----------------------------------------------------------------------
     // Win32 window class + HWND
@@ -108,15 +111,11 @@ Window::Window() {
     vp.MaxDepth = 1.f;
     GPU.d3d_context->RSSetViewports(1, &vp);
 
-    // Register with Core so the worker thread can reach this window.
-    CORE.window = *this;
-
     // Size the root node to fill the client area.
-    CORE.root.width(static_cast<float>(W))
-        .height(static_cast<float>(H));
+    iptr_->doc.root.width(static_cast<float>(W)).height(static_cast<float>(H));
 }
 Window::~Window() {
-    CORE.shutdown();
+    iptr_->doc.shutdown();
 }
 
 // ===========================================================================
@@ -125,6 +124,19 @@ Window::~Window() {
 
 unsigned int Window::width()  const { return iptr_->width; }
 unsigned int Window::height() const { return iptr_->height; }
+
+Node& Window::root() { return iptr_->doc.root; }
+
+float Window::mouse_x() { return iptr_->doc.input.mouse_screen_x; }
+float Window::mouse_y() { return iptr_->doc.input.mouse_screen_y; }
+
+MouseButton Window::held_button() { return iptr_->doc.input.held; }
+Modifiers   Window::modifiers() { return iptr_->doc.input.modifiers; }
+int         Window::key_vkey() { return iptr_->doc.input.key_vkey; }
+bool        Window::key_repeat() { return iptr_->doc.input.key_repeat; }
+wchar_t     Window::key_char() { return iptr_->doc.input.key_char; }
+float       Window::scroll_dx() { return iptr_->doc.input.scroll_dx; }
+float       Window::scroll_dy() { return iptr_->doc.input.scroll_dy; }
 
 // ===========================================================================
 // Window - run loop
@@ -144,7 +156,8 @@ int Window::run(std::function<void()> fn) {
 
     // Kick off the worker thread (layout + draw + present loop).
     iptr_->thread_main = std::move(fn);
-    CORE.start();
+    iptr_->doc.window = WeakImpl<IWindow>(iptr_);
+    iptr_->doc.start();
 
     MSG msg = {};
     while (GetMessage(&msg, nullptr, 0, 0)) {

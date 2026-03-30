@@ -1,255 +1,347 @@
-# Lintel Layout Language
+# Lintel UI DSL Documentation
 
-Lintel is a declarative, indentation-scoped language for defining UI trees, styles, transitions, and event handlers. It is parsed into a typed AST and then applied to a runtime scene graph by the `load()` function.
+## Overview
 
----
+This Domain-Specific Language (DSL) defines a declarative UI layout and styling system for building structured interfaces. It combines:
 
-## Syntax Overview
+* **Design tokens** (colors, constants)
+* **Reusable styles**
+* **Hierarchical layout (node tree)**
+* **Stateful interactions (hover, focus, etc.)**
 
-Indentation is structural. A block opens with `:` at the end of a line and closes when indentation returns to its parent level. Spaces or tabs are both accepted; mixing them in the same file is not recommended. Comments begin with `//` and extend to the end of the line.
-
----
-
-## Values
-
-| Form | Type | Example |
-|---|---|---|
-| Integer or float | Number | `16`, `1.5`, `0.25f` |
-| Hex colour | HexColor | `#FF0000`, `#FF0000FF` |
-| Boolean | Boolean | `true`, `false` |
-| Quoted string | Identifier | `"monospace"` |
-| Bare word | Identifier | `row`, `center` |
-| Variable reference | Identifier | `text-muted` |
-| Space-separated list | ListExpr | `4 8 4 8` |
-
-Hex colours accept 6 digits (opaque) or 8 digits (with alpha). Numbers accept an optional trailing `f`.
+The syntax is indentation-based and designed for readability.
 
 ---
 
-## Variables
+## 1. Design Tokens
 
-Top-level bindings expand in-place wherever the name is used as a value. They are resolved once at load time.
+Global variables define reusable values such as colors.
+
+### Syntax
 
 ```
-text-muted   = #9CA3AF
-accent-color = #3B82F6
-base-size    = 14
+<name> = <value>
 ```
 
----
+### Example
 
-## Styles
-
-A style is a named block of properties (and optional event overrides) that can be applied to any node. Styles may apply other styles; later properties override earlier ones.
-
+```dsl
+accent-green = #00e5a0
+bg-root      = #0a0b0d
+text-muted   = #3a3f55
 ```
-style card:
-    direction  = column
-    padding    = 16
-    background = #1E1E2E
-    border-radius = 8
 
-style card-hover:
-    apply card
-    background = #2A2A3E
+### Usage
+
+Tokens can be referenced anywhere:
+
+```dsl
+background-color = bg-root
+text-color = text-muted
 ```
 
 ---
 
-## Nodes
+## 2. Style Definitions
 
-Nodes form the scene tree. Any identifier followed by `:` opens a node block. Optionally a name follows the tag for cross-reference registration.
+Reusable style blocks define common UI patterns.
 
+### Syntax
+
+```dsl
+style <style-name>:
+    <property> = <value>
+    ...
 ```
+
+### Example
+
+```dsl
+style btn:
+    height = 32
+    background-color = #141720
+    border-radius = 3
+```
+
+---
+
+## 3. Style Composition
+
+Styles can inherit from other styles.
+
+### Syntax
+
+```dsl
+apply <style-name>
+```
+
+### Example
+
+```dsl
+style btn-danger:
+    apply btn
+    background-color = bg-error
+```
+
+---
+
+## 4. Properties
+
+Properties define layout, appearance, and behavior.
+
+### Common Layout Properties
+
+| Property  | Description                 |
+| --------- | --------------------------- |
+| direction | `row` or `column`           |
+| align     | Cross-axis alignment        |
+| justify   | Main-axis alignment         |
+| gap       | Space between children      |
+| padding   | Inner spacing               |
+| margin    | Outer spacing               |
+| width     | Fixed width                 |
+| height    | Fixed height                |
+| share     | Flexible sizing (like flex) |
+
+### Visual Properties
+
+| Property         | Description      |
+| ---------------- | ---------------- |
+| background-color | Background color |
+| border-color     | Border color     |
+| border-weight    | Border thickness |
+| border-radius    | Corner rounding  |
+
+### Text Properties
+
+| Property    | Description |
+| ----------- | ----------- |
+| content     | Text string |
+| font-size   | Font size   |
+| font-family | Font family |
+| text-color  | Text color  |
+| bold        | Boolean     |
+
+### Behavior Properties
+
+| Property   | Description               |
+| ---------- | ------------------------- |
+| focusable  | Enables focus interaction |
+| editable   | Allows text editing       |
+| transition | Animated property change  |
+
+---
+
+## 5. Event Handlers
+
+Styles and nodes can define interaction states.
+
+### Syntax
+
+```dsl
+on <event>:
+    <property> = <value>
+```
+
+### Supported Events
+
+* `mouse-enter`
+* `mouse-leave`
+* `mouse-down`
+* `focus`
+* `blur`
+
+### Example
+
+```dsl
+on mouse-enter:
+    background-color = #1e2444
+```
+
+---
+
+## 6. Node System
+
+UI is built as a tree of nodes.
+
+### Syntax
+
+```dsl
+node "<name>":
+    <properties>
+    <children>
+```
+
+### Anonymous Nodes
+
+```dsl
 node:
     direction = row
-    gap       = 8
-
-node sidebar:
-    width = 240
-
-text:
-    content   = "hello"
-    font-size = 14
-```
-
-Built-in node tags: `node`, `text`, `graph`, `image`. Custom tags can be registered via `register_node()` before calling `load()`.
-
----
-
-## Properties
-
-Properties are `key = value` pairs inside any block. Keys are hyphenated identifiers. The following properties receive special treatment:
-
-| Key | Notes |
-|---|---|
-| `direction` | `row` or `column` |
-| `align` | `start`, `center`, `end`, `stretch` |
-| `justify` | `start`, `center`, `end`, `space-between`, `space-around` |
-| `text-align` | `left`, `center`, `right`, `justify` |
-| `padding` | 1, 2, or 4 space-separated numbers (CSS box model order) |
-| `margin` | same as `padding` |
-| `transition` | `<property> <duration_s> <easing>` |
-| `focusable` | `true` / `false` |
-| `draggable` | `true` / `false` |
-
-All other keys are looked up in the framework property registry.
-
----
-
-## Applying Styles
-
-`apply` merges a style's properties into the current node. Multiple `apply` lines are allowed; later ones override earlier ones. Local properties always override applied styles.
-
-```
-node:
-    apply card
-    apply card-hover
-    width = 100        // wins over anything in the styles
 ```
 
 ---
 
-## Event Handlers
+## 7. Root Layout
 
-`on <event>:` blocks declare property overrides that are animated onto the node when the named event fires. The easing and duration are controlled by `transition` declarations on the node.
+The `root` block defines the entire UI.
 
-```
-node:
-    background = #1E1E2E
-    transition = background 0.2 ease-out
+### Syntax
 
-    on hover:
-        background = #2A2A3E
-
-    on press:
-        background = #111122
-```
-
-Events can appear inside styles and are inherited when the style is applied:
-
-```
-style button:
-    padding    = 8 16
-    background = #3B82F6
-    transition = background 0.15 ease-out
-
-    on hover:
-        background = #60A5FA
-
-    on press:
-        background = #2563EB
-```
-
-Available events are registered by the framework via `FRAMEWORK.get_event()`. Common names: `hover`, `press`, `focus`, `blur`, `drag`.
-
----
-
-## Nesting
-
-Nodes nest by indentation. Any property type (`apply`, properties, events, child nodes) may appear at any depth in any order, though the conventional order is: `apply` lines, then properties, then events, then children.
-
-```
-node:
-    direction = column
-    gap       = 12
-
-    text:
-        content   = "mem 412 MB"
-        font-size = 10
-        font-family = "monospace"
-        text-color = text-muted
-
-    node:
-        direction = row
-        gap       = 4
-
-        text:
-            content = "▲"
-        text:
-            content = "1.2%"
-```
-
----
-
-## Root
-
-`root:` is a reserved node tag. Its properties are applied directly to the top-level scene node rather than creating a new child.
-
-```
+```dsl
 root:
+    <properties>
+    <children>
+```
+
+---
+
+## 8. Text Nodes
+
+Text elements are defined using `text`.
+
+### Syntax
+
+```dsl
+text "<optional-name>":
+    content = "..."
+```
+
+### Example
+
+```dsl
+text "title":
+    content = "LINTEL RECV"
+    font-size = 12
+```
+
+---
+
+## 9. Specialized Nodes
+
+### Graph
+
+```dsl
+graph "<name>":
+    <properties>
+```
+
+Used for rendering charts.
+
+### Example
+
+```dsl
+graph "throughput-graph":
+    grid-color = #141820
+```
+
+---
+
+## 10. Layout Concepts
+
+### Flex-like Behavior
+
+* `direction = row | column`
+* `share = 1` → expands to fill available space
+* Fixed vs flexible sizing supported
+
+### Nesting
+
+Layouts are hierarchical:
+
+```dsl
+node "container":
     direction = column
-    padding   = 24
-    gap       = 16
 
-    node:
-        // ...
+    node "child":
+        height = 20
 ```
 
 ---
 
-## Complete Example
+## 11. Reusability Patterns
+
+### Base Style Pattern
+
+```dsl
+style base-chip:
+    padding = 4 10
+
+style chip-active:
+    apply base-chip
+    background-color = #141720
+```
+
+### Variant Pattern
+
+* `chip-active`
+* `chip-warn`
+* `chip-inactive`
+
+---
+
+## 12. Example Structure
+
+High-level UI composition:
 
 ```
-// ── Variables ──────────────────────────────────────────────────
-bg-base    = #1E1E2E
-bg-surface = #2A2A3E
-text-main  = #CDD6F4
-text-muted = #9CA3AF
-accent     = #89B4FA
-
-// ── Styles ─────────────────────────────────────────────────────
-style surface:
-    background    = bg-surface
-    border-radius = 6
-    padding       = 12
-
-style interactive:
-    transition = background 0.15 ease-out
-
-    on hover:
-        background = #353550
-
-    on press:
-        background = #111122
-
-// ── Tree ───────────────────────────────────────────────────────
-root:
-    background = bg-base
-    direction  = column
-    padding    = 24
-    gap        = 16
-
-    node panel:
-        apply surface
-        apply interactive
-        direction = row
-        gap       = 8
-
-        text:
-            content     = "mem"
-            font-size   = 10
-            font-family = "monospace"
-            text-color  = text-muted
-
-        text:
-            content     = "412 MB"
-            font-size   = 10
-            font-family = "monospace"
-            text-color  = text-main
+root
+ ├── topbar
+ ├── source-strip
+ ├── body
+ │    ├── left-panel
+ │    ├── center-panel
+ │    └── right-panel
+ └── statusbar
 ```
 
 ---
 
-## Loading
+## 13. Key Features Summary
 
-```cpp
-// Register any custom node types before calling load().
-lintel::register_node("sparkline", [] (Node& parent, const NodeDecl&) {
-    return SparklineNode();
-});
+* Declarative UI tree
+* Style inheritance (`apply`)
+* Design tokens
+* Built-in layout system (flex-like)
+* Event-driven styling
+* Strong readability via indentation
 
-Node root = lintel::load("ui/dashboard.lt");
+---
+
+## 14. Best Practices
+
+* Use **design tokens** for all colors and constants
+* Define **base styles** and extend them
+* Keep node trees **shallow and modular**
+* Use `share` instead of hardcoding sizes where possible
+* Group related UI into named nodes
+
+---
+
+## 15. Notes
+
+* Order matters for overrides (later properties win)
+* Multiple `transition` entries are allowed
+* Events override base properties temporarily
+* Styles are purely declarative (no logic)
+
+---
+
+## 16. File Extension
+
+Recommended extension:
+
+```
+.lintel.ltl
 ```
 
-Parse errors are printed to `stderr` and the loader continues with a partial tree where possible. The returned `Node` is always valid.
+or
+
+```
+.ui.ltl
+```
+
+---
+
+## Conclusion
+
+This DSL provides a clean, composable way to define UI structure, styling, and interactions in a single readable format—ideal for dashboards, tooling interfaces, and system UIs.

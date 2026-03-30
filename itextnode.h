@@ -123,7 +123,7 @@ public:
      */
     void sync_style();
 
-    void apply_notifier(Property p) override;
+    void apply_callback(Property p) override;
 
     /* -- layout ------------------------------------------------------------- */
     void measure(float avail_w, float avail_h) override;

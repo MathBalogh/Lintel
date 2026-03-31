@@ -155,7 +155,7 @@ int Window::run(std::function<void()> fn) {
     SetForegroundWindow(iptr_->hwnd);
 
     // Kick off the worker thread (layout + draw + present loop).
-    iptr_->thread_main = std::move(fn);
+    iptr_->doc.thread_tick = std::move(fn);
     iptr_->doc.window = WeakImpl<IWindow>(iptr_);
     iptr_->doc.start();
 

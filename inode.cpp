@@ -149,7 +149,7 @@ void INode::bubble_up(Event type) {
 // INode - layout
 // ===========================================================================
 
-void INode::measure(float avail_w, float avail_h) {
+void INode::default_measure(float avail_w, float avail_h) {
     if (!attr.layout_dirty &&
         !has_active_tweens_ &&
         avail_w == cached_avail_w_ &&
@@ -214,8 +214,7 @@ void INode::measure(float avail_w, float avail_h) {
     cached_avail_h_ = avail_h;
     attr.layout_dirty = false;
 }
-
-void INode::arrange(float slot_x, float slot_y) {
+void INode::default_arrange(float slot_x, float slot_y) {
     const Edges margin = layout_margin();
     rect.x = slot_x + margin.left;
     rect.y = slot_y + margin.top;
@@ -223,6 +222,13 @@ void INode::arrange(float slot_x, float slot_y) {
         if (layout_direction() == Direction::Column) arrange_column();
         else arrange_row();
     }
+}
+
+void INode::measure(float avail_w, float avail_h) {
+    default_measure(avail_w, avail_h);
+}
+void INode::arrange(float slot_x, float slot_y) {
+    default_arrange(slot_x, slot_y);
 }
 
 void INode::layout(float slot_x, float slot_y, float avail_w, float avail_h) {
@@ -455,9 +461,10 @@ Node& Node::push() {
     ci->doc_ = iptr_->doc_;            // inherit document
     return child;
 }
-
-Node& Node::push(Node&& incoming) {
+Node& Node::push(Node& incoming) {
     if (!incoming) return *this;
+    
+    iptr_->propagate_dirty();
 
     INode* inc = incoming.handle<INode>();
 
@@ -475,9 +482,10 @@ Node& Node::push(Node&& incoming) {
 
     return iptr_->children.back();
 }
-
 Node Node::remove(Node& child) {
     if (!child) return Node(nullptr);
+    
+    iptr_->propagate_dirty();
 
     auto& vec = iptr_->children;
     for (size_t i = 0; i < vec.size(); ++i) {
@@ -492,9 +500,9 @@ Node Node::remove(Node& child) {
             return owner;
         }
     }
+
     return Node(nullptr);
 }
-
 Node* Node::child(size_t index) {
     if (index < iptr_->children.size())
         return &iptr_->children[index];
@@ -597,6 +605,10 @@ Node& Node::animate(Property p, Color target, float duration, Easing easing) {
     return *this;
 }
 
+void Node::dirty() {
+    iptr_->attr.layout_dirty = true;
+}
+
 // ===========================================================================
 // Node - event binding
 // ===========================================================================
@@ -683,6 +695,16 @@ void INode::animate_prop_impl(Property p, Color target,
 // ===========================================================================
 // animate_prop
 // ===========================================================================
+
+
+// Mark layout_dirty as true for all ancestors of this node (inclusive to this node)
+void INode::propagate_dirty() {
+    WeakNode node = WeakNode(this);
+    while (node) {
+        node->handle()->attr.layout_dirty = true;
+        node = node->handle()->parent;
+    }
+}
 
 void INode::animate_prop(Property p, const PropValue& target) {
     const float* fp = std::get_if<float>(&target);

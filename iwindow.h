@@ -37,8 +37,6 @@ public:
     HWND hwnd = nullptr;
     Document doc;
 
-    std::function<void()>        thread_main;
-
     ComPtr<IDXGISwapChain>         swapchain;
     ComPtr<ID3D11RenderTargetView> rtv;
     ComPtr<ID2D1Bitmap1>           d2d_target;

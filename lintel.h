@@ -27,7 +27,7 @@ public:
 
     // -- Tree ------------------------------------------------------------
 
-    Node& push(Node&& child);
+    Node& push(Node& child);
     Node& push();
     Node  remove(Node& child);
     Node* child(size_t index);
@@ -78,6 +78,8 @@ public:
     Node& animate(Property p, float  target, float duration, Easing easing = Easing::EaseOut);
     Node& animate(Property p, Color  target, float duration, Easing easing = Easing::EaseOut);
 
+    void dirty();
+
     // -- Events ----------------------------------------------------------
 
     Node& on(Event type, EventHandler handler);
@@ -101,6 +103,8 @@ public:
     explicit TextNode(std::wstring_view content);
 
     TextNode& content(std::wstring_view c);
+    TextNode& clear_content();
+    std::wstring& content();
 
     TextNode& text_align(TextAlign a);
     TextNode& scrollbar(bool);

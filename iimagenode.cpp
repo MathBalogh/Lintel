@@ -1,4 +1,5 @@
 #include "iimagenode.h"
+#include "framework.h"
 
 namespace lintel {
 
@@ -50,6 +51,16 @@ void IImageNode::arrange(float slot_x, float slot_y) {
     const Edges margin = layout_margin();
     rect.x = slot_x + margin.left;
     rect.y = slot_y + margin.top;
+}
+
+void IImageNode::apply_callback(Property p) {
+    if (p == FRAMEWORK.get_property("path")) {
+        if (auto i = attr.get<std::wstring>(p)) {
+            image_path_ = narrow(*i);
+            invalidate_bitmap();
+            attr.layout_dirty = true;
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

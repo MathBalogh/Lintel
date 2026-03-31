@@ -60,6 +60,7 @@ Framework::Framework() {
     };
 
     register_property("content");
+    register_property("path");
 }
 
 Framework& Framework::get() {

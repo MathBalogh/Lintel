@@ -238,4 +238,7 @@ inline void fire_char_context(
     class INode* impl, WeakNode handle,
     wchar_t ch, Modifiers mods);
 
+
+std::string narrow(const std::wstring& w);
+
 } // namespace lintel

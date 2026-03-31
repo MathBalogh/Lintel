@@ -27,21 +27,6 @@ namespace lintel {
 
 namespace {
 
-// Convert a wide string to UTF-8.  Used for transition spec parsing.
-static std::string narrow(const std::wstring& w) {
-    if (w.empty()) return {};
-    #ifdef _WIN32
-    int n = WideCharToMultiByte(CP_UTF8, 0, w.data(), static_cast<int>(w.size()),
-                                nullptr, 0, nullptr, nullptr);
-    std::string out(n, '\0');
-    WideCharToMultiByte(CP_UTF8, 0, w.data(), static_cast<int>(w.size()),
-                        out.data(), n, nullptr, nullptr);
-    return out;
-    #else
-    return std::string(w.begin(), w.end()); // ASCII fallback
-    #endif
-}
-
 // ── Shorthand expansion: padding / margin ────────────────────────────────────
 //
 // Accepts either a single float (all sides) or a wstring of 1, 2, or 4

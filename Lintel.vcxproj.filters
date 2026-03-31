@@ -99,11 +99,11 @@
     <ClCompile Include="canvas.cpp">
       <Filter>lib\core\gpu</Filter>
     </ClCompile>
-    <ClCompile Include="inode.cpp">
-      <Filter>lib\core\document</Filter>
-    </ClCompile>
     <ClCompile Include="core.cpp">
       <Filter>lib\core\document</Filter>
+    </ClCompile>
+    <ClCompile Include="inode.cpp">
+      <Filter>lib\core\nodes</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -149,11 +149,11 @@
     <ClInclude Include="canvas.h">
       <Filter>lib\core\gpu</Filter>
     </ClInclude>
-    <ClInclude Include="inode.h">
-      <Filter>lib\core\document</Filter>
-    </ClInclude>
     <ClInclude Include="core.h">
       <Filter>lib\core\document</Filter>
+    </ClInclude>
+    <ClInclude Include="inode.h">
+      <Filter>lib\core\nodes</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

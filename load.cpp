@@ -192,7 +192,7 @@ class TreeBuilder {
             std::cerr << "load: unknown node type '" << decl.tag << "' - skipped\n";
             return;
         }
-        lintel::Node& n = parent.push(std::move(node));
+        lintel::Node& n = parent.push(node);
 
         // 1. Seed with inherited values.
         apply_inherited(n, inherited);

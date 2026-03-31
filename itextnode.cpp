@@ -72,11 +72,6 @@ void ITextNode::sync_style() {
 
     editable = attr.get_or<bool>(property::Editable, false);
 
-    if (content.empty()) {
-        Property p = FRAMEWORK.get_property("content");
-        if (auto str = attr.get<std::wstring>(p)) content = *str;
-    }
-
     if (changed) {
         // Text-metric changes affect measured size: force a layout pass and
         // rebuild the DWrite format so the next draw picks up the change.
@@ -336,6 +331,12 @@ void ITextNode::clamp_scroll() {
 void ITextNode::ensure_caret_visible() {
     if (!editable || !has_focus || !is_scrollbar_visible()) return;
 
+    if (content.empty()) {
+        scroll_offset_y = 0.f;
+        clamp_scroll();
+        return;
+    }
+
     ensure_format();
     float lw = (!wrap) ? 1e6f : text_inner_w();
     ComPtr<IDWriteTextLayout> layout = make_layout(lw, 1e6f);
@@ -344,13 +345,10 @@ void ITextNode::ensure_caret_visible() {
     float cpx = 0.f, cpy = 0.f;
     DWRITE_HIT_TEST_METRICS h{};
     layout->HitTestTextPosition(static_cast<UINT32>(caret_pos), FALSE, &cpx, &cpy, &h);
-
     float caret_top = cpy;
     float caret_bot = cpy + std::max(h.height, font_size);
-
     float view_top = scroll_offset_y;
     float view_bot = scroll_offset_y + inner_h();
-
     if (caret_top < view_top) {
         scroll_offset_y = caret_top;
     }
@@ -421,23 +419,39 @@ void ITextNode::draw(Node& handle, Canvas& canvas) {
     }
 
     canvas.pop_clip();
+    // Caret + scrollbar (drawn *outside* the text clip)
+    if (editable && has_focus) {
+        if (content.empty()) {
+            // Special-case empty text - avoids DWrite's phantom-line quirk entirely
+            const float cx = content_x();
+            float cy = content_y();
 
-    if (!editable || !has_focus || !layout) return;
+            // Optional: respect vertical_center when no scrollbar (mimics paragraph alignment)
+            if (vertical_center && !scrollbar_enabled) {
+                const float line_h = font_size;  // good enough approximation
+                cy += (inner_h() - line_h) * 0.5f;
+            }
 
-    // caret (still inside the clip)
-    float caret_px = 0.f, caret_py = 0.f;
-    DWRITE_HIT_TEST_METRICS hit{};
-    layout->HitTestTextPosition(
-        static_cast<UINT32>(caret_pos),
-        /*isTrailingHit=*/FALSE,
-        &caret_px, &caret_py, &hit);
+            const float ch = font_size;
+            canvas.draw_line(cx, cy, cx, cy + ch, text_color, 1.0f);
+        }
+        else if (layout) {
+            // Original non-empty caret code (unchanged)
+            float caret_px = 0.f, caret_py = 0.f;
+            DWRITE_HIT_TEST_METRICS hit{};
+            layout->HitTestTextPosition(
+                static_cast<UINT32>(caret_pos),
+                /*isTrailingHit=*/FALSE,
+                &caret_px, &caret_py, &hit);
 
-    const float cx = content_x() + caret_px;
-    const float cy = content_y() + caret_py - scroll_offset_y;
-    const float ch = (hit.height > 0.f) ? hit.height : font_size;
-    canvas.draw_line(cx, cy, cx, cy + ch, text_color, 1.0f);
+            const float cx = content_x() + caret_px;
+            const float cy = content_y() + caret_py - scroll_offset_y;
+            const float ch = (hit.height > 0.f) ? hit.height : font_size;
+            canvas.draw_line(cx, cy, cx, cy + ch, text_color, 1.0f);
+        }
+    }
 
-    // scrollbar (drawn outside the text clip)
+    // Scrollbar must be drawn whenever it is visible (even if not focused/empty)
     if (is_scrollbar_visible()) {
         const float view_h = inner_h();
         const float th = thumb_height();
@@ -510,11 +524,9 @@ void ITextNode::on_click_position(float lx, float ly, bool extend) {
 
     // adjust hit-test y for current scroll offset
     float layout_ly = ly + scroll_offset_y;
-
     BOOL is_trailing = FALSE, is_inside = FALSE;
     DWRITE_HIT_TEST_METRICS m{};
     layout->HitTestPoint(lx, layout_ly, &is_trailing, &is_inside, &m);
-
     size_t pos = m.textPosition + (is_trailing ? 1u : 0u);
     pos = std::min(pos, content.size());
     set_caret(pos, extend);
@@ -626,26 +638,41 @@ void ITextNode::paste_from_clipboard() {
 TextNode::TextNode(): Node(nullptr) {
     impl_allocate<ITextNode>();
     ITextNode& n = *handle<ITextNode>();
-    n.attr.set(property::Share, 0.f); // shrink-wrap by default
+    n.attr.set(property::Share, 0.f);
+    n.attr.layout_dirty = true;
+    n.invalidate_format();
     n.wire_events(*this);
 }
-
 TextNode::TextNode(std::wstring_view initial_content): Node(nullptr) {
     impl_allocate<ITextNode>();
     ITextNode& n = *handle<ITextNode>();
     n.content = initial_content;
+    n.attr.set(FRAMEWORK.get_property("content"), std::wstring(initial_content));
     n.attr.set(property::Share, 0.f);
+    n.attr.layout_dirty = true;
+    n.invalidate_format();
+    n.caret_pos = 0;
+    n.content_height_ = 0.f;
+    n.scroll_offset_y = 0.f;
     n.wire_events(*this);
 }
 
 TextNode& TextNode::content(std::wstring_view c) {
     ITextNode& n = *handle<ITextNode>();
     n.content = c;
+    n.attr.set(FRAMEWORK.get_property("content"), std::wstring(c)); // Keep the property system in sync to avoid latent artifacts
+    n.caret_pos = 0;
     n.content_height_ = 0.f;
     n.scroll_offset_y = 0.f;
     n.attr.layout_dirty = true;
     n.invalidate_format();
     return *this;
+}
+TextNode& TextNode::clear_content() {
+    return content(L"");
+}
+std::wstring& TextNode::content() {
+    return handle<ITextNode>()->content;
 }
 
 TextNode& TextNode::text_align(TextAlign a) {

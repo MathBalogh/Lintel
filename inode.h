@@ -77,6 +77,9 @@ public:
     bool draggable_flag = false;
     bool mouse_inside = false;
 
+    // Mark layout_dirty as true for all ancestors of this node
+    void propagate_dirty();
+
     // -- Layout cache -----------------------------------------------------
 
     float cached_avail_w_ = -1.f;
@@ -129,6 +132,9 @@ public:
     }
 
     // -- Layout pipeline -------------------------------------------------
+
+    void default_measure(float avail_w, float avail_h);
+    void default_arrange(float slot_x, float slot_y);
 
     virtual void measure(float avail_w, float avail_h);
     virtual void arrange(float slot_x, float slot_y);

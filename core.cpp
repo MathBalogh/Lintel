@@ -74,7 +74,7 @@ void Document::resize_now() {
 
     const unsigned int new_w = win->client_width();
     const unsigned int new_h = win->client_height();
-    if (new_w == 0 || new_h == 0) return;   // minimised
+    if (new_w == 0 || new_h == 0) return; // minimised
 
     std::lock_guard lock(render_mut_);
 

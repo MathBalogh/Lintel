@@ -46,7 +46,6 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 // ===========================================================================
 // Window - construction / destruction
 // ===========================================================================
-
 Window::Window() {
     impl_allocate();
     this_win = iptr_;
@@ -62,14 +61,20 @@ Window::Window() {
     wc.lpszClassName = L"lintel::Window";
     RegisterClass(&wc);
 
-    constexpr unsigned int W = 800, H = 600;
+    constexpr unsigned int W = 800, H = 600;  // desired *client* size
+
+    RECT wr{ 0, 0, static_cast<LONG>(W), static_cast<LONG>(H) };
+    AdjustWindowRect(&wr, WS_OVERLAPPEDWINDOW, FALSE);
+
+    const int windowW = wr.right - wr.left;
+    const int windowH = wr.bottom - wr.top;
 
     iptr_->hwnd = CreateWindowW(
         wc.lpszClassName,
         L"",
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT,
-        W, H,
+        windowW, windowH,
         nullptr, nullptr,
         wc.hInstance,
         nullptr
@@ -81,10 +86,6 @@ Window::Window() {
     // -----------------------------------------------------------------------
     // DXGI swap chain
     // -----------------------------------------------------------------------
-    //
-    // Walk the DXGI chain from the D3D11 device to the IDXGIFactory so we can
-    // create a swap chain bound to the HWND we just created.
-    //
 
     ComPtr<IDXGIDevice>  dxgi_device;
     ComPtr<IDXGIAdapter> adapter;
@@ -95,8 +96,8 @@ Window::Window() {
 
     DXGI_SWAP_CHAIN_DESC sd = {};
     sd.BufferCount = 2;
-    sd.BufferDesc.Width = W;
-    sd.BufferDesc.Height = H;
+    sd.BufferDesc.Width = W;          // client size
+    sd.BufferDesc.Height = H;         // client size
     sd.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
     sd.BufferDesc.RefreshRate.Numerator = 60;
     sd.BufferDesc.RefreshRate.Denominator = 1;
@@ -106,35 +107,8 @@ Window::Window() {
     sd.Windowed = TRUE;
     sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
     factory->CreateSwapChain(GPU.d3d_device.Get(), &sd, &iptr_->swapchain);
-
-    // -----------------------------------------------------------------------
-    // Back-buffer render targets
-    // -----------------------------------------------------------------------
-    // rebuild_targets() creates the D3D RTV and the d2d_target bitmap for
-    // the back buffer, but deliberately does NOT set the D2D context target —
-    // that is owned by the offscreen texture below.
-
-    iptr_->rebuild_targets();
-
-    D3D11_VIEWPORT vp = {};
-    vp.Width = static_cast<float>(W);
-    vp.Height = static_cast<float>(H);
-    vp.MinDepth = 0.f;
-    vp.MaxDepth = 1.f;
-    GPU.d3d_context->RSSetViewports(1, &vp);
-
-    // -----------------------------------------------------------------------
-    // Offscreen UI render texture
-    // -----------------------------------------------------------------------
-    // The D2D context target is set here and stays pointed at this texture
-    // for the lifetime of the window (except when briefly redirected to the
-    // back buffer for the blit step in process_default).
-
-    iptr_->rebuild_ui_texture(W, H);
-
-    // Size the root node to fill the client area.
-    iptr_->doc.root.width(static_cast<float>(W)).height(static_cast<float>(H));
 }
+
 Window::~Window() {
     iptr_->doc.shutdown();
 }
@@ -178,6 +152,7 @@ int Window::run(std::function<void()> fn) {
     // Kick off the worker thread (layout + draw + present loop).
     iptr_->doc.thread_tick = std::move(fn);
     iptr_->doc.window = WeakImpl<IWindow>(iptr_);
+    iptr_->doc.resize_now();
     iptr_->doc.start();
 
     MSG msg = {};

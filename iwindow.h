@@ -185,6 +185,7 @@ public:
         ui_height = h;
 
         GPU.d2d_context->SetTarget(ui_d2d_target.Get());
+
         return true;
     }
 

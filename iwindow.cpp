@@ -24,9 +24,18 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             PostQuitMessage(0);
             return 0;
 
-        // Suppress background erase; the D2D/D3D pipeline owns every pixel.
+            // Suppress background erase; the D2D/D3D pipeline owns every pixel.
         case WM_ERASEBKGND:
             return 1;
+
+            // Resize the swap chain and UI texture synchronously on the message
+            // thread so the new content fills the window in the same frame that
+            // the window edge moves, eliminating the one-frame lag that causes
+            // resize jitter.  render_mut_ in resize_now() serialises this against
+            // any in-flight draw on the worker thread.
+        case WM_SIZE:
+            this_win->doc.resize_now();
+            return 0;
     }
 
     this_win->doc.push({ msg, wp, lp });
@@ -99,8 +108,11 @@ Window::Window() {
     factory->CreateSwapChain(GPU.d3d_device.Get(), &sd, &iptr_->swapchain);
 
     // -----------------------------------------------------------------------
-    // Initial render targets + D3D11 viewport
+    // Back-buffer render targets
     // -----------------------------------------------------------------------
+    // rebuild_targets() creates the D3D RTV and the d2d_target bitmap for
+    // the back buffer, but deliberately does NOT set the D2D context target —
+    // that is owned by the offscreen texture below.
 
     iptr_->rebuild_targets();
 
@@ -110,6 +122,15 @@ Window::Window() {
     vp.MinDepth = 0.f;
     vp.MaxDepth = 1.f;
     GPU.d3d_context->RSSetViewports(1, &vp);
+
+    // -----------------------------------------------------------------------
+    // Offscreen UI render texture
+    // -----------------------------------------------------------------------
+    // The D2D context target is set here and stays pointed at this texture
+    // for the lifetime of the window (except when briefly redirected to the
+    // back buffer for the blit step in process_default).
+
+    iptr_->rebuild_ui_texture(W, H);
 
     // Size the root node to fill the client area.
     iptr_->doc.root.width(static_cast<float>(W)).height(static_cast<float>(H));

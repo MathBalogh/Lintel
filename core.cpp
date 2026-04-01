@@ -68,6 +68,25 @@ void Document::shutdown() {
         worker_.join();
 }
 
+void Document::resize_now() {
+    auto* win = window.handle<IWindow>();
+    if (!win) return;
+
+    const unsigned int new_w = win->client_width();
+    const unsigned int new_h = win->client_height();
+    if (new_w == 0 || new_h == 0) return;   // minimised
+
+    std::lock_guard lock(render_mut_);
+
+    win->resize_swapchain();
+    win->rebuild_ui_texture(new_w, new_h);
+
+    if (INode* r = root.handle<INode>()) {
+        r->attr.set(property::Width, static_cast<float>(new_w));
+        r->attr.set(property::Height, static_cast<float>(new_h));
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Document::bind_root
 // ---------------------------------------------------------------------------
@@ -394,8 +413,10 @@ void Document::process_message(UINT msg, WPARAM wp, LPARAM lp) {
 
         case WM_SIZE:
         {
-            root_impl->attr.set(property::Width, (float) win->client_width());
-            root_impl->attr.set(property::Height, (float) win->client_height());
+            // resize_swapchain() resizes the swap-chain back buffer immediately
+            // and records a pending UI texture resize.  The offscreen texture
+            // and root layout dimensions are updated lazily in process_default()
+            // once the resize gesture has settled, avoiding mid-resize thrash.
             win->resize_swapchain();
             break;
         }
@@ -484,6 +505,23 @@ void Document::process_message(UINT msg, WPARAM wp, LPARAM lp) {
 // ---------------------------------------------------------------------------
 // Document::process_default
 // ---------------------------------------------------------------------------
+//
+// Frame loop:
+//
+//   1. Resize check – if ui_pending_w/h differ from the current logical size,
+//      rebuild the offscreen texture and update the root layout immediately.
+//      The alloc-rounding in rebuild_ui_texture means no D3D allocation occurs
+//      unless the window grows beyond the current physical allocation.
+//
+//   2. Layout + Draw – run layout and draw the scene into the offscreen
+//      UI texture.  The D2D context target is ui_d2d_target throughout.
+//
+//   3. Blit – redirect the D2D context to the back-buffer bitmap, draw the
+//      offscreen texture 1:1 into the back buffer, then restore the target.
+//      Because the offscreen texture and swap chain are always the same logical
+//      size there is never any stretching.
+//
+//   4. Present – flip the swap chain.
 
 void Document::process_default() {
     auto* win = window.handle<IWindow>();
@@ -493,21 +531,61 @@ void Document::process_default() {
     auto* d2d = GPU.d2d_context.Get();
     if (!d2d) return;
 
+    if (!win->ui_d2d_target) return;
+
+    // -----------------------------------------------------------------------
+    // 1. Layout (outside the lock — pure CPU work, no D2D/D3D calls)
+    // -----------------------------------------------------------------------
+
     if (INode* r = root.handle<INode>())
         r->tick_tweens(ui_tick_dts);
 
     if (INode* r = root.handle<INode>())
         r->layout(0.f, 0.f,
-                  static_cast<float>(win->width),
-                  static_cast<float>(win->height));
+                  static_cast<float>(win->ui_width),
+                  static_cast<float>(win->ui_height));
 
-    d2d->BeginDraw();
-    d2d->Clear(D2D1::ColorF(0.09f, 0.09f, 0.09f, 1.f));
+    // -----------------------------------------------------------------------
+    // 2. Draw + Blit (locked against resize_now on the message thread)
+    // -----------------------------------------------------------------------
 
-    if (INode* r = root.handle<INode>())
-        r->draw(root, canvas);
+    {
+        std::lock_guard lock(render_mut_);
 
-    d2d->EndDraw();
+        // Re-check after acquiring: resize_now may have just rebuilt targets.
+        if (!win->ui_d2d_target || !win->d2d_target) return;
+
+        d2d->SetTarget(win->ui_d2d_target.Get());
+        d2d->BeginDraw();
+        d2d->Clear(D2D1::ColorF(0.09f, 0.09f, 0.09f, 1.f));
+
+        if (INode* r = root.handle<INode>())
+            r->draw(root, canvas);
+
+        d2d->EndDraw();
+
+        D2D1_RECT_F dest = D2D1::RectF(
+            0.f, 0.f,
+            static_cast<float>(win->ui_width),
+            static_cast<float>(win->ui_height));
+
+        d2d->SetTarget(win->d2d_target.Get());
+        d2d->BeginDraw();
+        d2d->DrawBitmap(
+            win->ui_d2d_target.Get(),
+            &dest,
+            1.0f,
+            D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR,
+            nullptr,
+            nullptr);
+        d2d->EndDraw();
+
+        d2d->SetTarget(win->ui_d2d_target.Get());
+    }
+
+    // -----------------------------------------------------------------------
+    // 3. Present
+    // -----------------------------------------------------------------------
 
     win->swapchain->Present(1, 0);
 }

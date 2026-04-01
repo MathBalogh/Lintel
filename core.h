@@ -110,7 +110,8 @@ struct WindowMessage {
 //
 class Document {
     std::thread               worker_;
-    std::mutex                mut_;
+    std::mutex                mut_;         // guards the message queue
+    std::mutex                render_mut_;  // guards swap-chain / D2D targets
     std::queue<WindowMessage> queue_;
     std::atomic<bool>         running_{ false };
 
@@ -208,6 +209,10 @@ public:
     void push(WindowMessage m); // thread-safe, called from Win32 thread
     void start();               // launch worker thread
     void shutdown();            // stop worker thread (blocking)
+
+    // Called directly from WndProc (message thread) on WM_SIZE.
+    // Acquires render_mut_ so it never races with an in-flight draw.
+    void resize_now();
 
     // Recursively stamp every INode in a subtree with a document pointer.
     static void stamp_document(class INode* node, Document* doc);

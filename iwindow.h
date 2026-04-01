@@ -38,8 +38,23 @@ public:
     Document doc;
 
     ComPtr<IDXGISwapChain>         swapchain;
-    ComPtr<ID3D11RenderTargetView> rtv;
-    ComPtr<ID2D1Bitmap1>           d2d_target;
+    ComPtr<ID3D11RenderTargetView> rtv;         // back-buffer RTV (blit target)
+    ComPtr<ID2D1Bitmap1>           d2d_target;  // back-buffer D2D surface
+
+    // ------------------------------------------------------------------
+    // Offscreen render target
+    // ------------------------------------------------------------------
+    //
+    // The UI is always drawn into this texture rather than directly into
+    // the swap-chain back buffer.  Each frame the result is blitted to the
+    // back buffer via DrawBitmap.  resize_now() on the message thread
+    // recreates the texture synchronously under render_mut_ whenever the
+    // window size changes.
+
+    ComPtr<ID3D11Texture2D> ui_texture;
+    ComPtr<ID2D1Bitmap1>    ui_d2d_target;
+    unsigned int            ui_width = 0;
+    unsigned int            ui_height = 0;
 
     unsigned int width = 0;
     unsigned int height = 0;
@@ -75,36 +90,35 @@ public:
     // -----------------------------------------------------------------------
 
     /**
-     * @brief Release all per-frame render targets.
+     * @brief Release the back-buffer render targets.
      *
      * Must be called before ResizeBuffers() so that every reference to the
-     * old back buffer is dropped.  Also clears the D2D device-context target
-     * so D2D releases its internal back-buffer reference.
+     * old back buffer is dropped.  The offscreen UI texture is NOT released
+     * here — it remains valid across swap-chain resizes.
      */
     void release_targets() {
         rtv.Reset();
         d2d_target.Reset();
+        // Unbind the back buffer from D2D, but leave the offscreen target
+        // in place so the draw loop can continue uninterrupted.
         if (GPU.d2d_context)
             GPU.d2d_context->SetTarget(nullptr);
     }
 
     /**
-     * @brief (Re)create render targets from the current swap-chain back buffer.
+     * @brief (Re)create back-buffer render targets from the current swap chain.
      *
-     * Called once at window creation and after every successful ResizeBuffers().
-     * Assumes swapchain is valid and width / height are already updated.
+     * Called after every successful ResizeBuffers().  The D2D context target
+     * is NOT changed here — it stays pointed at the offscreen surface.
      * Returns false on any unrecoverable D3D / D2D error.
      */
     bool rebuild_targets() {
         release_targets();
 
-        // D3D11 render-target view over the swap-chain back buffer.
         ComPtr<ID3D11Texture2D> back_buffer;
         HR_RET_F(swapchain->GetBuffer(0, IID_PPV_ARGS(&back_buffer)));
         HR_RET_F(GPU.d3d_device->CreateRenderTargetView(back_buffer.Get(), nullptr, &rtv));
 
-        // D2D bitmap bound to the same DXGI surface so D2D can draw directly
-        // into the swap-chain back buffer without an extra copy.
         if (GPU.d2d_context) {
             ComPtr<IDXGISurface> surface;
             if (SUCCEEDED(back_buffer.As(&surface))) {
@@ -113,11 +127,10 @@ public:
                 bp.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
                 bp.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET
                     | D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
-
-                if (SUCCEEDED(GPU.d2d_context->CreateBitmapFromDxgiSurface(
-                    surface.Get(), &bp, &d2d_target))) {
-                    GPU.d2d_context->SetTarget(d2d_target.Get());
-                }
+                GPU.d2d_context->CreateBitmapFromDxgiSurface(
+                    surface.Get(), &bp, &d2d_target);
+                // d2d_target is only used as the blit destination during
+                // present; the draw-loop target remains ui_d2d_target.
             }
         }
 
@@ -125,10 +138,63 @@ public:
     }
 
     /**
-     * @brief Handle WM_SIZE: resize the swap chain and rebuild render targets.
+     * @brief Create (or recreate) the offscreen UI render texture.
      *
-     * Silently skips zero-dimension sizes (minimised window) and no-op resizes.
-     * Returns false on unrecoverable error; the caller should tear down.
+     * No-ops if the requested size matches the current size.
+     * Called from resize_now() on the message thread under render_mut_.
+     * Returns false on failure; the old target is left intact.
+     */
+    bool rebuild_ui_texture(unsigned int w, unsigned int h) {
+        if (!GPU.d2d_context || !GPU.d3d_device) return false;
+        if (w == 0 || h == 0) return false;
+        if (w == ui_width && h == ui_height) return true;
+
+        D3D11_TEXTURE2D_DESC td{};
+        td.Width = w;
+        td.Height = h;
+        td.MipLevels = 1;
+        td.ArraySize = 1;
+        td.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        td.SampleDesc.Count = 1;
+        td.Usage = D3D11_USAGE_DEFAULT;
+        td.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+        td.MiscFlags = 0;
+
+        ComPtr<ID3D11Texture2D> new_tex;
+        if (FAILED(GPU.d3d_device->CreateTexture2D(&td, nullptr, &new_tex)))
+            return false;
+
+        ComPtr<IDXGISurface> surface;
+        if (FAILED(new_tex.As(&surface))) return false;
+
+        D2D1_BITMAP_PROPERTIES1 bp{};
+        bp.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        bp.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+        bp.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET;
+
+        GPU.d2d_context->SetTarget(nullptr);
+
+        ComPtr<ID2D1Bitmap1> new_bmp;
+        if (FAILED(GPU.d2d_context->CreateBitmapFromDxgiSurface(
+            surface.Get(), &bp, &new_bmp)))
+            return false;
+
+        ui_texture = std::move(new_tex);
+        ui_d2d_target = std::move(new_bmp);
+        ui_width = w;
+        ui_height = h;
+
+        GPU.d2d_context->SetTarget(ui_d2d_target.Get());
+        return true;
+    }
+
+    /**
+     * @brief Resize the swap chain to match the current client area.
+     *
+     * Called from resize_now() under render_mut_.  Only responsible for
+     * the swap-chain back buffer; the offscreen UI texture is handled
+     * separately by rebuild_ui_texture().
+     * Returns false on unrecoverable error.
      */
     bool resize_swapchain() {
         if (!swapchain) return false;
@@ -136,11 +202,7 @@ public:
         const unsigned int new_w = client_width();
         const unsigned int new_h = client_height();
 
-        // Zero dimensions occur when the window is minimised - nothing to do.
         if (new_w == 0 || new_h == 0) return true;
-
-        // Skip if the size hasn't actually changed.
-        if (new_w == width && new_h == height) return true;
 
         width = new_w;
         height = new_h;

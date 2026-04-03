@@ -34,9 +34,6 @@
     <Filter Include="lib\language\ast">
       <UniqueIdentifier>{61b835ba-811c-4372-9823-3de2dbecd34f}</UniqueIdentifier>
     </Filter>
-    <Filter Include="lib\language\load">
-      <UniqueIdentifier>{5e6552b1-ebdb-4314-9ce9-b10770751648}</UniqueIdentifier>
-    </Filter>
     <Filter Include="lib\primatives">
       <UniqueIdentifier>{e4e43b06-b9f2-424a-b444-aa4c4d55c3ff}</UniqueIdentifier>
     </Filter>
@@ -81,19 +78,13 @@
     <ClCompile Include="ast.cpp">
       <Filter>lib\language\ast</Filter>
     </ClCompile>
-    <ClCompile Include="load.cpp">
-      <Filter>lib\language\load</Filter>
-    </ClCompile>
-    <ClCompile Include="visitor.cpp">
-      <Filter>lib\language\load</Filter>
-    </ClCompile>
     <ClCompile Include="stylesheet.cpp">
       <Filter>lib\api</Filter>
     </ClCompile>
     <ClCompile Include="canvas.cpp">
       <Filter>lib\primatives\gpu</Filter>
     </ClCompile>
-    <ClCompile Include="core.cpp">
+    <ClCompile Include="document.cpp">
       <Filter>lib\document</Filter>
     </ClCompile>
     <ClCompile Include="inode.cpp">
@@ -101,6 +92,12 @@
     </ClCompile>
     <ClCompile Include="registry.cpp">
       <Filter>lib\api</Filter>
+    </ClCompile>
+    <ClCompile Include="load.cpp">
+      <Filter>lib\language</Filter>
+    </ClCompile>
+    <ClCompile Include="visitor.cpp">
+      <Filter>lib\language\ast</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -131,20 +128,20 @@
     <ClInclude Include="ast.h">
       <Filter>lib\language\ast</Filter>
     </ClInclude>
-    <ClInclude Include="visitor.h">
-      <Filter>lib\language\load</Filter>
-    </ClInclude>
     <ClInclude Include="include.h">
       <Filter>lib</Filter>
     </ClInclude>
     <ClInclude Include="canvas.h">
       <Filter>lib\primatives\gpu</Filter>
     </ClInclude>
-    <ClInclude Include="core.h">
+    <ClInclude Include="document.h">
       <Filter>lib\document</Filter>
     </ClInclude>
     <ClInclude Include="inode.h">
       <Filter>lib\document</Filter>
+    </ClInclude>
+    <ClInclude Include="visitor.h">
+      <Filter>lib\language\ast</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

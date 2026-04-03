@@ -1,4 +1,4 @@
-#include "core.h"
+#include "document.h"
 #include "inode.h"
 #include "iwindow.h"
 

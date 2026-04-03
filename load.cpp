@@ -25,34 +25,119 @@ static bool s_registered = ([] {
     return true;
 })();
 
-// ─── AST value → PropValue ───────────────────────────────────────────────────
+// ─── Helpers for new Property / UIValue / Enum system ────────────────────────
 //
-// Converts a parser AST expression node into a concrete PropValue.
-// IdentExpr nodes that match a VarDecl in the resolver are followed one level.
+// After the property refactor, values must be turned into the exact
+// Property variant the target key expects (UIValue for dimensions/gap,
+// unsigned-int enum for Direction/AlignItems/etc.).  The DSL still uses
+// the old value syntax (NumExpr, IdentExpr, …) so we dispatch on the
+// property name string.
 
-static Property node_to_prop(const Node* node, const StyleResolver& res) {
-    if (!node) return std::wstring{};
+static bool is_ui_value_key(std::string_view prop) {
+    lintel::Key k = lintel::get_key(std::string(prop));
+    if (k.index == lintel::Key::Null || !k.affects_layout()) return false;
+
+    // All layout keys except the three enums are UIValue (px by default,
+    // "auto" special-cased in Ident handling). Share stays float.
+    switch (k.index) {
+        case lintel::Key::Width:
+        case lintel::Key::Height:
+        case lintel::Key::PaddingTop:
+        case lintel::Key::PaddingRight:
+        case lintel::Key::PaddingBottom:
+        case lintel::Key::PaddingLeft:
+        case lintel::Key::MarginTop:
+        case lintel::Key::MarginRight:
+        case lintel::Key::MarginBottom:
+        case lintel::Key::MarginLeft:
+        case lintel::Key::Gap:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static lintel::Property try_parse_enum(std::string_view prop_key, const std::string& value_name) {
+    lintel::Key k = lintel::get_key(std::string(prop_key));
+    if (k.index == lintel::Key::Null) return {};
+
+    if (k == lintel::Key::Direction) {
+        if (value_name == "row")    return lintel::Property(static_cast<unsigned int>(lintel::Direction::Row));
+        if (value_name == "column") return lintel::Property(static_cast<unsigned int>(lintel::Direction::Column));
+    }
+    else if (k == lintel::Key::AlignItems) {
+        if (value_name == "start")   return lintel::Property(static_cast<unsigned int>(lintel::Align::Start));
+        if (value_name == "center")  return lintel::Property(static_cast<unsigned int>(lintel::Align::Center));
+        if (value_name == "end")     return lintel::Property(static_cast<unsigned int>(lintel::Align::End));
+        if (value_name == "stretch") return lintel::Property(static_cast<unsigned int>(lintel::Align::Stretch));
+    }
+    else if (k == lintel::Key::JustifyItems) {
+        if (value_name == "start")          return lintel::Property(static_cast<unsigned int>(lintel::Justify::Start));
+        if (value_name == "center")         return lintel::Property(static_cast<unsigned int>(lintel::Justify::Center));
+        if (value_name == "end")            return lintel::Property(static_cast<unsigned int>(lintel::Justify::End));
+        if (value_name == "space-between")  return lintel::Property(static_cast<unsigned int>(lintel::Justify::SpaceBetween));
+        if (value_name == "space-around")   return lintel::Property(static_cast<unsigned int>(lintel::Justify::SpaceAround));
+    }
+    else if (k == lintel::Key::TextAlign) {
+        if (value_name == "left")     return lintel::Property(static_cast<unsigned int>(lintel::TextAlign::Left));
+        if (value_name == "center")   return lintel::Property(static_cast<unsigned int>(lintel::TextAlign::Center));
+        if (value_name == "right")    return lintel::Property(static_cast<unsigned int>(lintel::TextAlign::Right));
+        if (value_name == "justify")  return lintel::Property(static_cast<unsigned int>(lintel::TextAlign::Justify));
+    }
+
+    return {};
+}
+
+// ─── AST value → PropValue (key-aware) ───────────────────────────────────────
+//
+// Now takes the property name so we can emit UIValue / enum Property variants.
+// Variable resolution still follows one level exactly as before.
+
+static lintel::Property node_to_prop(std::string_view key, const Node* node, const StyleResolver& res) {
+    if (!node) return {};
+
+    // Ident that names a VarDecl → follow exactly one level (old behaviour).
+    if (node->kind == NodeKind::IdentExpr) {
+        const std::string& name = node->as<IdentExpr>().name;
+        if (const Node* target = res.var(name))
+            return node_to_prop(key, target, res);
+    }
 
     switch (node->kind) {
         case NodeKind::NumExpr:
-            return node->as<NumExpr>().to_number();
+        {
+            float num = node->as<NumExpr>().to_number();
+            if (is_ui_value_key(key))
+                return lintel::Property(lintel::UIValue::px(num));
+            return lintel::Property(num);
+        }
 
         case NodeKind::BoolExpr:
-            return node->as<BoolExpr>().value;
+            return lintel::Property(node->as<BoolExpr>().value);
 
         case NodeKind::HexExpr:
-            return node->as<HexExpr>().to_color();
+            return lintel::Property(node->as<HexExpr>().to_color());
 
         case NodeKind::IdentExpr:
         {
             const std::string& name = node->as<IdentExpr>().name;
-            if (const Node* target = res.var(name))
-                return node_to_prop(target, res);
-            return to_wstring(name);
+
+            // "auto" for any UIValue key
+            if (name == "auto" && is_ui_value_key(key))
+                return lintel::Property(lintel::UIValue::make_auto());
+
+            // Enum literals (Direction, AlignItems, JustifyItems, TextAlign)
+            lintel::Property enum_val = try_parse_enum(key, name);
+            if (!enum_val.is_null())
+                return enum_val;
+
+            // ordinary identifier → wstring (font-family, style names, …)
+            return lintel::Property(to_wstring(name));
         }
 
         case NodeKind::ListExpr:
         {
+            // space-joined string (unchanged from original)
             std::wostringstream oss;
             bool first = true;
             for (const Node* item : node->as<ListExpr>().list) {
@@ -61,18 +146,19 @@ static Property node_to_prop(const Node* node, const StyleResolver& res) {
                 oss << std::wstring(s.begin(), s.end());
                 first = false;
             }
-            return oss.str();
+            return lintel::Property(oss.str());
         }
 
+        case NodeKind::CallExpr:
+            // reserved for future function values (px(100), …); ignored for now
+            return {};
+
         default:
-            return std::wstring{};
+            return {};
     }
 }
 
 // ─── Inherited properties ─────────────────────────────────────────────────────
-//
-// A small set of visual properties that flow from parent to child when the
-// child does not set them explicitly (font-family, font-size, text-color, …).
 
 struct InheritedProps {
     std::optional<std::wstring> font_family;
@@ -109,9 +195,6 @@ static void apply_inherited(lintel::Node& n, const InheritedProps& inh) {
 }
 
 // ─── AST → StyleSheet (pass 2) ────────────────────────────────────────────────
-//
-// Walks all StyleDecl and VarDecl nodes in the AST and populates a StyleSheet.
-// Variable resolution uses the StyleResolver built in pass 1.
 
 static StyleSheet build_stylesheet(const AST& ast, const StyleResolver& res) {
     StyleSheet sheet;
@@ -128,14 +211,11 @@ static StyleSheet build_stylesheet(const AST& ast, const StyleResolver& res) {
 
             if (child->kind == NodeKind::PropDecl) {
                 const PropDecl& pd = child->as<PropDecl>();
-                props.push_back({ pd.property, node_to_prop(pd.value, res) });
+                props.push_back({ pd.property, node_to_prop(pd.property, pd.value, res) });
             }
             else if (child->kind == NodeKind::ApplyExpr) {
-                // Style inheritance: fold the base style's props into this one.
-                // Later declarations in sd.props win, so we prepend base props.
                 const std::string& base = child->as<ApplyExpr>().style;
                 if (const StyleSheet::Style* s = sheet.find_style(base)) {
-                    // Insert at front so local props (processed after) override.
                     props.insert(props.begin(), s->props.begin(), s->props.end());
                 }
                 else {
@@ -155,7 +235,7 @@ static StyleSheet build_stylesheet(const AST& ast, const StyleResolver& res) {
                 for (Node* dp : od.props) {
                     if (!dp || dp->kind != NodeKind::PropDecl) continue;
                     const PropDecl& pd = dp->as<PropDecl>();
-                    deltas.push_back({ pd.property, node_to_prop(pd.value, res) });
+                    deltas.push_back({ pd.property, node_to_prop(pd.property, pd.value, res) });
                 }
                 handlers.push_back({ ev, std::move(deltas) });
             }
@@ -168,15 +248,6 @@ static StyleSheet build_stylesheet(const AST& ast, const StyleResolver& res) {
 }
 
 // ─── TreeBuilder (pass 3) ─────────────────────────────────────────────────────
-//
-// Walks NodeDecl nodes in the AST and constructs the runtime scene graph,
-// delegating all property application and event wiring to the StyleSheet.
-//
-// Priority per node (CSS-like, weakest to strongest):
-//   1. Inherited props   (gap-fill from parent)
-//   2. Applied styles    (in declaration order, later overrides earlier)
-//   3. Node-local props  (always win)
-//   4. Event handlers    (from both styles and local OnDecls)
 
 class TreeBuilder {
     StyleSheet& sheet_;
@@ -205,8 +276,7 @@ class TreeBuilder {
         for (Node* child : decl.props) {
             if (!child || child->kind != NodeKind::PropDecl) continue;
             const PropDecl& pd = child->as<PropDecl>();
-            StyleSheet::dispatch_prop(n, pd.property,
-                                      node_to_prop(pd.value, res_));
+            StyleSheet::dispatch_prop(n, pd.property, node_to_prop(pd.property, pd.value, res_));
         }
 
         // 4. Node-local event handlers.
@@ -224,7 +294,7 @@ class TreeBuilder {
             for (Node* dp : od.props) {
                 if (!dp || dp->kind != NodeKind::PropDecl) continue;
                 const PropDecl& pd = dp->as<PropDecl>();
-                props->push_back({ pd.property, node_to_prop(pd.value, res_) });
+                props->push_back({ pd.property, node_to_prop(pd.property, pd.value, res_) });
             }
 
             n.on(ev, [props] (WeakNode self) {
@@ -262,8 +332,7 @@ public:
                 for (Node* child : decl.props) {
                     if (!child || child->kind != NodeKind::PropDecl) continue;
                     const PropDecl& pd = child->as<PropDecl>();
-                    StyleSheet::dispatch_prop(root, pd.property,
-                                              node_to_prop(pd.value, res_));
+                    StyleSheet::dispatch_prop(root, pd.property, node_to_prop(pd.property, pd.value, res_));
                 }
                 for (Node* child : decl.props) {
                     if (!child || child->kind != NodeKind::NodeDecl) continue;

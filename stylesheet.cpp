@@ -21,12 +21,12 @@ namespace {
 // ── UIValue parser (width / height) ─────────────────────────────────────────
 // Accepts numbers (legacy), "auto", "100px", "50%", "50.5%"
 
-static UIValue parse_ui_value(const std::any& raw) {
-    if (const float* f = std::any_cast<const float>(&raw))
-        return UIValue::px(*f);
+static UIValue parse_ui_value(const Property& raw) {
+    if (raw.is_ui())
+        return raw.get_ui();
 
-    if (const std::wstring* ws = std::any_cast<const std::wstring>(&raw)) {
-        std::wstring s = *ws;
+    if (raw.is_wstring()) {
+        std::wstring s = raw.get_wstring();
         // trim whitespace (simple)
         while (!s.empty() && std::iswspace(s.front())) s.erase(s.begin());
         while (!s.empty() && std::iswspace(s.back())) s.pop_back();
@@ -54,39 +54,38 @@ static UIValue parse_ui_value(const std::any& raw) {
             return UIValue::px(px);
         }
 
-        std::cerr << "stylesheet: bad UIValue '" << to_string(*ws) << "' - defaulting to auto\n";
+        std::cerr << "stylesheet: bad UIValue '" << to_string(s) << "' - defaulting to auto\n";
     }
     return UIValue::make_auto();
 }
 
 // ── Shorthand expansion: padding / margin ────────────────────────────────────
 
-static Edges parse_edges(const std::any& raw) {
-    if (const float* f = std::any_cast<const float>(&raw))
-        return Edges(*f);
+static Edges parse_edges(const Property& raw) {
+    if (raw.is_float())
+        return Edges(raw.get_float());
 
-    if (const std::wstring* ws = std::any_cast<const std::wstring>(&raw)) {
+    if (raw.is_wstring()) {
+        const std::wstring& ws = raw.get_wstring();
         std::vector<float> vals;
         size_t i = 0;
-        while (i < ws->size()) {
-            while (i < ws->size() && std::iswspace((*ws)[i])) ++i;
-            if (i >= ws->size()) break;
+        while (i < ws.size()) {
+            while (i < ws.size() && std::iswspace(ws[i])) ++i;
+            if (i >= ws.size()) break;
             size_t j = i;
-            while (j < ws->size() && !std::iswspace((*ws)[j])) ++j;
+            while (j < ws.size() && !std::iswspace(ws[j])) ++j;
 
-            std::wstring tok = ws->substr(i, j - i);
+            std::wstring tok = ws.substr(i, j - i);
             std::string narrow_tok = to_string(tok);
             float f = 0.f;
-            std::from_chars(narrow_tok.data(),
-                            narrow_tok.data() + narrow_tok.size(), f);
+            std::from_chars(narrow_tok.data(), narrow_tok.data() + narrow_tok.size(), f);
             vals.push_back(f);
             i = j;
         }
         if (vals.size() == 1) return Edges(vals[0]);
         if (vals.size() == 2) return Edges(vals[0], vals[1]);
         if (vals.size() == 4) return Edges(vals[0], vals[1], vals[2], vals[3]);
-        std::cerr << "stylesheet: padding/margin expects 1, 2 or 4 values, got "
-            << vals.size() << " - defaulting to 0\n";
+        std::cerr << "stylesheet: padding/margin expects 1, 2 or 4 values, got " << vals.size() << " - defaulting to 0\n";
     }
     return Edges(0.f);
 }

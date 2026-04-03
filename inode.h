@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core.h"   // → lintel.h → types.h
+#include "document.h"
 
 #include <algorithm>
 #include <array>

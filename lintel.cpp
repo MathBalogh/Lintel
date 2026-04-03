@@ -1,4 +1,4 @@
-#include "core.h"
+#include "document.h"
 
 #include <algorithm>
 #include <cmath>
@@ -236,6 +236,8 @@ Property Properties::get_or(Key key, Property::Type type, Property or_) const {
 }
 
 // --- Constructors ---
+
+Property::Property(): data_{ 0 }, type_(Type::Null) {}
 
 Property::Property(bool p) {
     new (&data_) bool(p);

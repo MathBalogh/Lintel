@@ -3,7 +3,6 @@
 #include "handle.h"
 
 #include <string>
-#include <any>
 #include <functional>
 
 // ---------------------------------------------------------------------------
@@ -11,6 +10,73 @@
 // ---------------------------------------------------------------------------
 
 namespace lintel {
+
+struct Rect {
+    float x, y, w, h;
+
+    Rect(float w_ = 0.f, float h_ = 0.f) noexcept;
+    Rect(float x_, float y_, float w_, float h_) noexcept;
+};
+struct Edges {
+    float top, right, bottom, left;
+
+    Edges() noexcept;
+    Edges(float all) noexcept;
+    Edges(float x_axis, float y_axis) noexcept;
+    Edges(float top_, float right_, float bottom_, float left_) noexcept
+        : top(top_), right(right_), bottom(bottom_), left(left_) {}
+
+    float horizontal() const; // left + right
+    float vertical()   const; // top  + bottom
+};
+
+enum class Direction {
+    Row,
+    Column
+};
+enum class Align {
+    Start,
+    Center,
+    End,
+    Stretch
+};
+enum class Justify {
+    Start,
+    Center,
+    End,
+    SpaceBetween,
+    SpaceAround
+};
+
+enum class TextAlign {
+    Left,
+    Center,
+    Right,
+    Justify
+};
+
+enum class MouseButton {
+    None,
+    Left,
+    Right,
+    Middle
+};
+enum class Event {
+    Null,
+    MouseEnter, MouseLeave, MouseMove,
+    MouseDown, MouseUp,
+    Click, DoubleClick, RightClick,
+    Scroll,
+    Focus, Blur,
+    KeyDown, KeyUp, Char,
+    DragStart, Drag, DragEnd,
+    Any
+};
+struct Modifiers {
+    bool shift = false;
+    bool ctrl = false;
+    bool alt = false;
+};
 
 struct Color {
     float r, g, b, a;
@@ -127,6 +193,10 @@ private:
 
 } // namespace lintel
 
+// ---------------------------------------------------------------------------
+// Hash Override for Key
+// ---------------------------------------------------------------------------
+
 namespace std {
 template<>
 struct hash<lintel::Key> {
@@ -136,7 +206,12 @@ struct hash<lintel::Key> {
 };
 } // namespace std
 
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
 namespace lintel {
+
 class Property {
 public:
     enum class Type {
@@ -149,7 +224,7 @@ public:
         WString
     };
 
-    Property() = default;
+    Property();
     ~Property();
 
     Property(bool p);
@@ -204,8 +279,7 @@ private:
 
     using Storage = std::aligned_storage_t<DATA_SIZE, DATA_ALIGN>;
     Storage data_;
-
-    Type type_ = Type::Null;
+    Type type_;
 
     void destroy();
     void copy_from(const Property& other);
@@ -257,73 +331,6 @@ public:
 
     Property get(Key key) const;
     Property get_or(Key key, Property::Type type, Property or_) const;
-};
-
-struct Rect {
-    float x, y, w, h;
-
-    Rect(float w_ = 0.f, float h_ = 0.f) noexcept;
-    Rect(float x_, float y_, float w_, float h_) noexcept;
-};
-struct Edges {
-    float top, right, bottom, left;
-
-    Edges() noexcept;
-    Edges(float all) noexcept;
-    Edges(float x_axis, float y_axis) noexcept;
-    Edges(float top_, float right_, float bottom_, float left_) noexcept
-        : top(top_), right(right_), bottom(bottom_), left(left_) {}
-
-    float horizontal() const; // left + right
-    float vertical()   const; // top  + bottom
-};
-
-enum class Direction {
-    Row,
-    Column
-};
-enum class Align {
-    Start,
-    Center,
-    End,
-    Stretch
-};
-enum class Justify {
-    Start,
-    Center,
-    End,
-    SpaceBetween,
-    SpaceAround
-};
-
-enum class TextAlign {
-    Left,
-    Center,
-    Right,
-    Justify
-};
-
-enum class MouseButton {
-    None,
-    Left,
-    Right,
-    Middle
-};
-enum class Event {
-    Null,
-    MouseEnter, MouseLeave, MouseMove,
-    MouseDown, MouseUp,
-    Click, DoubleClick, RightClick,
-    Scroll,
-    Focus, Blur,
-    KeyDown, KeyUp, Char,
-    DragStart, Drag, DragEnd,
-    Any
-};
-struct Modifiers {
-    bool shift = false;
-    bool ctrl = false;
-    bool alt = false;
 };
 
 } // namespace std
@@ -484,47 +491,38 @@ public:
 // ---------------------------------------------------------------------------
 // StyleSheet
 // ---------------------------------------------------------------------------
+
 class StyleSheet {
 public:
-    // ── Types ─────────────────────────────────────────────────────────────
-
-    // A single resolved key/value pair, independent of the AST.
     struct Prop {
         std::string key;
-        Property  value;
+        Property value;
     };
 
-    // A set of Prop deltas that fire when an event occurs on a node to which
-    // this handler was applied.
     struct Handler {
         Event             event;
         std::vector<Prop> deltas;
     };
 
-    // One complete named style.
     struct Style {
-        std::vector<Prop>    props;    // applied at style-application time
-        std::vector<Handler> handlers; // wired as event handlers
+        std::vector<Prop>    props;
+        std::vector<Handler> handlers;
     };
 
-    // ── Build API ─────────────────────────────────────────────────────────
-    //
-    // These are called by load() during tree construction.  They can also be
-    // called directly to build a stylesheet programmatically.
-    //
-
+    // -- Build API ---------------------------------------------------------
+    
     // Define or replace a named style.
     StyleSheet& define(std::string name, std::vector<Prop> props, std::vector<Handler> handlers = {});
 
     // Append event handlers to an existing (or new) style.
     StyleSheet& define_handler(const std::string& name, Event event, std::vector<Prop> deltas);
 
-    // ── Query ─────────────────────────────────────────────────────────────
+    // -- Query -------------------------------------------------------------
 
     bool has_style(std::string_view name) const;
     const Style* find_style(std::string_view name) const;
 
-    // ── Application ───────────────────────────────────────────────────────
+    // -- Application -------------------------------------------------------
 
     // Apply all props of a named style to n
     // Wire all of that style's event handlers onto n.
@@ -533,7 +531,7 @@ public:
 
     static void dispatch_prop(Node& n, std::string_view key, const Property& val);
 
-    // ── Query ───────────────────────────────────────────────────────
+    // -- Query -------------------------------------------------------
 
     void register_node(const std::string& name, WeakNode node);
     WeakNode find(const char* name);

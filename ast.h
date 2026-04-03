@@ -1,5 +1,5 @@
 #pragma once
-#include "core.h"
+#include "document.h"
 #include <memory_resource>
 #include <string>
 #include <vector>

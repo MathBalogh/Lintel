@@ -1,5 +1,5 @@
 #pragma once
-#include "core.h"
+#include "document.h"
 
 #include <dwmapi.h>
 #pragma comment(lib, "dwmapi.lib")

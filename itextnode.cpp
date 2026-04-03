@@ -737,6 +737,7 @@ TextNode& TextNode::on(Event event, std::function<void(TextNode&)> callback) {
     Node::on(event, [callback] (WeakNode node) {
         callback(node->as<TextNode>());
     });
+    return *this;
 }
 
 } // namespace lintel

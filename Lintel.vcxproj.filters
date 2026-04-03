@@ -151,6 +151,7 @@
     <None Include="test.ltl">
       <Filter>src</Filter>
     </None>
+    <None Include="README.md" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="image.jpg">

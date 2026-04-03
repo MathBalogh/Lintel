@@ -39,10 +39,10 @@ void ITextNode::sync_style() {
             changed = true;
         }
     }
-    if (const auto* v = props.find(Key::FontSize, Property::Type::Float)) {
-        if (v->get_float() != font_size) { font_size = *v; changed = true; }
+    if (const auto* v = props.get_float(Key::FontSize)) {
+        if (*v != font_size) { font_size = *v; changed = true; }
     }
-    if (const auto* v = props.find(Key::TextColor, Property::Type::Color)) {
+    if (const Color* v = props.get_color(Key::TextColor)) {
         text_color = *v;
     }
     if (const auto* v = props.find(Key::Bold, Property::Type::Bool)) {
@@ -210,7 +210,6 @@ void ITextNode::wire_events(Node& handle) {
 void ITextNode::ensure_format() {
     if (fmt) return;
 
-    // TODO: wasteful
     fmt = CANVAS.make_text_format(font_family.c_str(), font_size, bold, italic_val, wrap);
 
     if (fmt) {
@@ -416,9 +415,7 @@ void ITextNode::draw(Node& handle, Canvas& canvas) {
     draw_selection(layout, canvas, scroll_offset_y);
 
     if (!content.empty()) {
-        const Rect text_rect{
-            content_x(), content_y() - scroll_offset_y,
-            text_inner_w(), inner_h() };
+        const Rect text_rect{content_x(), content_y() - scroll_offset_y, text_inner_w(), inner_h() };
         canvas.draw_text(content, fmt.Get(), text_rect, text_color);
     }
 

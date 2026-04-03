@@ -19,9 +19,6 @@
     <Filter Include="lib\nodes\image">
       <UniqueIdentifier>{841ed894-d29a-4943-9dca-ae69375618bf}</UniqueIdentifier>
     </Filter>
-    <Filter Include="lib\nodes\text node">
-      <UniqueIdentifier>{042f426d-8751-4da4-9b8e-1911dd0bfd18}</UniqueIdentifier>
-    </Filter>
     <Filter Include="lib\document">
       <UniqueIdentifier>{205663ca-ee15-4bd4-a2f3-5ac4334d422f}</UniqueIdentifier>
     </Filter>
@@ -43,6 +40,9 @@
     <Filter Include="lib\primatives\window">
       <UniqueIdentifier>{ba48dd07-da70-4fce-83f4-299fd1a6cc62}</UniqueIdentifier>
     </Filter>
+    <Filter Include="lib\nodes\text">
+      <UniqueIdentifier>{042f426d-8751-4da4-9b8e-1911dd0bfd18}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="gpu.cpp">
@@ -52,7 +52,7 @@
       <Filter>lib\primatives\window</Filter>
     </ClCompile>
     <ClCompile Include="itextnode.cpp">
-      <Filter>lib\nodes\text node</Filter>
+      <Filter>lib\nodes\text</Filter>
     </ClCompile>
     <ClCompile Include="igraphnode.cpp">
       <Filter>lib\nodes\graph</Filter>
@@ -111,7 +111,7 @@
       <Filter>lib\primatives\window</Filter>
     </ClInclude>
     <ClInclude Include="itextnode.h">
-      <Filter>lib\nodes\text node</Filter>
+      <Filter>lib\nodes\text</Filter>
     </ClInclude>
     <ClInclude Include="igraphnode.h">
       <Filter>lib\nodes\graph</Filter>

@@ -1,8 +1,9 @@
 root:
 	background-color = #FFFFFF
-	node "test":
-		margin = 10
-		padding = 5 0 5 0 
-		background-color = #00FF00
-		width = 200
-		height = 50
+	text "text":
+		content = "Hello"
+		text-color = #000000
+		editable = true
+		border-color = #FF0000
+		border-weight = 1
+		share = 1

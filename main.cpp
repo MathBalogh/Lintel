@@ -11,9 +11,8 @@ int main() {
     win.root() = std::move(node);
 
     if (auto n = sheet.find<TextNode>("text")) {
-        n->properties()
-            .set(Key::Editable, true)
-            .set(Key::TextColor, Color(0, 0, 0));
+        n->set(Key::Editable, true)
+          .set(Key::TextColor, Color(0, 0, 0));
     }
 
     return win.run();

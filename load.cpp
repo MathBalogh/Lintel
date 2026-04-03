@@ -172,7 +172,7 @@ struct InheritedProps {
 
 static InheritedProps derive_inherited(const lintel::Node& n, const InheritedProps& parent) {
     InheritedProps out = parent;
-    Properties& a = const_cast<lintel::Node&>(n).properties();
+    Properties& a = const_cast<lintel::Node&>(n)->props;
     if (Property* v = a.find(Key::FontFamily, Property::Type::WString)) out.font_family = v->get_wstring();
     if (Property* v = a.find(Key::FontSize)) out.font_size = *v;
     if (Property* v = a.find(Key::TextColor)) out.text_color = v->get_color();
@@ -184,7 +184,7 @@ static InheritedProps derive_inherited(const lintel::Node& n, const InheritedPro
 }
 
 static void apply_inherited(lintel::Node& n, const InheritedProps& inh) {
-    Properties& a = n.properties();
+    Properties& a = n->props;
     if (inh.font_family && !a.has(Key::FontFamily)) a.set(Key::FontFamily, *inh.font_family);
     if (inh.font_size && !a.has(Key::FontSize)) a.set(Key::FontSize, *inh.font_size);
     if (inh.text_color && !a.has(Key::TextColor)) a.set(Key::TextColor, *inh.text_color);

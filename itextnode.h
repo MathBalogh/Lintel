@@ -116,13 +116,6 @@ public:
      */
     void ensure_format();
 
-    /**
-     * @brief Synchronise the attr map into the local resolved fields.
-     * Called at the top of measure() and draw().  Invalidates the DWrite
-     * format whenever a text-affecting property has actually changed.
-     */
-    void sync_style();
-
     void apply_callback(Key key) override;
 
     /* -- layout ------------------------------------------------------------- */

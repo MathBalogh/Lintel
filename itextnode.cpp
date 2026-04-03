@@ -30,65 +30,80 @@ static DWRITE_TEXT_ALIGNMENT dwrite_alignment(TextAlign a) {
 // ITextNode::measure() recomputes the correct size on the next frame.
 //
 
-void ITextNode::sync_style() {
-    bool changed = false; // true when a text-metric property changed
-
-    if (const auto* v = props.find(Key::FontFamily, Property::Type::WString)) {
-        if (v->get_wstring() != font_family) {
-            font_family = v->get_wstring();
-            changed = true;
-        }
-    }
-    if (const auto* v = props.get_float(Key::FontSize)) {
-        if (*v != font_size) { font_size = *v; changed = true; }
-    }
-    if (const Color* v = props.get_color(Key::TextColor)) {
-        text_color = *v;
-    }
-    if (const auto* v = props.find(Key::Bold, Property::Type::Bool)) {
-        if (v->get_bool() != bold) { bold = *v; changed = true; }
-    }
-    if (const auto* v = props.find(Key::Italic, Property::Type::Bool)) {
-        if (v->get_bool() != italic_val) { italic_val = *v; changed = true; }
-    }
-    if (const auto* v = props.find(Key::Wrap, Property::Type::Bool)) {
-        if (v->get_bool() != wrap) { wrap = *v; changed = true; }
-    }
-    // TextAlign is stored as float (integer cast) — same convention as Direction.
-    if (const auto* v = props.find(Key::TextAlign, Property::Type::Float)) {
-        TextAlign ta = static_cast<TextAlign>(static_cast<int>(*v));
-        if (ta != text_align_val) { text_align_val = ta; changed = true; }
-    }
-
-    {
-        bool prev = vertical_center;
-        vertical_center = props.get(Key::VerticalCenter);
-        if (prev != vertical_center) invalidate_format();
-    }
-    {
-        bool prev = scrollbar_enabled;
-        scrollbar_enabled = props.get(Key::Scrollbar);
-        if (prev != scrollbar_enabled) props.make_dirty();
-    }
-
-    editable = props.get(Key::Editable);
-
-    if (changed) {
-        // Text-metric changes affect measured size: force a layout pass and
-        // rebuild the DWrite format so the next draw picks up the change.
-        props.make_dirty();
-        invalidate_format();
-    }
-}
-
 void ITextNode::apply_callback(Key key) {
+    bool changed = false;
+
     if (key == get_key("content")) {
         if (const auto* str = props.find(key, Property::Type::WString)) {
             content = str->get_wstring();
             content_height_ = 0.f;
             scroll_offset_y = 0.f;
-            props.make_dirty();
         }
+    }
+
+    switch (key.index) {
+        case Key::FontFamily:
+            if (const auto* v = props.find(Key::FontFamily, Property::Type::WString)) {
+                if (v->get_wstring() != font_family) {
+                    font_family = v->get_wstring();
+                    changed = true;
+                }
+            }
+            break;
+        case Key::FontSize:
+            if (const auto* v = props.get_float(Key::FontSize)) {
+                if (*v != font_size) { font_size = *v; changed = true; }
+            }
+            break;
+        case Key::TextColor:
+            if (const Color* v = props.get_color(Key::TextColor)) {
+                text_color = *v;
+            }
+            break;
+        case Key::Bold:
+            if (const auto* v = props.find(Key::Bold, Property::Type::Bool)) {
+                if (v->get_bool() != bold) { bold = *v; changed = true; }
+            }
+            break;
+        case Key::Italic:
+            if (const auto* v = props.find(Key::Italic, Property::Type::Bool)) {
+                if (v->get_bool() != italic_val) { italic_val = *v; changed = true; }
+            }
+            break;
+        case Key::Wrap:
+            if (const auto* v = props.find(Key::Wrap, Property::Type::Bool)) {
+                if (v->get_bool() != wrap) { wrap = *v; changed = true; }
+            }
+            break;
+        case Key::TextAlign:
+            if (const auto* v = props.find(Key::TextAlign, Property::Type::Enum)) {
+                TextAlign ta = (TextAlign) v->get_enum();
+                if (ta != text_align_val) { text_align_val = ta; changed = true; }
+            }
+            break;
+        case Key::VerticalCenter:
+        {
+            bool prev = vertical_center;
+            vertical_center = props.get(Key::VerticalCenter);
+            if (prev != vertical_center) invalidate_format();
+            break;
+        }
+        case Key::Scrollbar:
+        {
+            bool prev = scrollbar_enabled;
+            scrollbar_enabled = props.get(Key::Scrollbar);
+            if (prev != scrollbar_enabled) props.make_dirty();
+            break;
+        }
+        case Key::Editable:
+        {
+            editable = props.get(Key::Editable);
+        }
+    }
+
+    if (changed) {
+        props.make_dirty();
+        invalidate_format();
     }
 }
 
@@ -235,10 +250,6 @@ ComPtr<IDWriteTextLayout> ITextNode::make_layout(float max_w, float max_h) const
 // ---------------------------------------------------------------------------
 
 void ITextNode::measure(float avail_w, float avail_h) {
-    // sync_style() may set props.layout_dirty if a text-metric property changed.
-    // It must run before the skip guard so those changes are detected this frame.
-    sync_style();
-
     // Delegate to the base skip guard, which also accounts for active tweens.
     if (can_skip_measure(avail_w, avail_h)) return;
 
@@ -396,7 +407,6 @@ void ITextNode::draw_selection(
 // ---------------------------------------------------------------------------
 
 void ITextNode::draw(Node& handle, Canvas& canvas) {
-    sync_style();
     draw_default(canvas);
 
     ensure_format();

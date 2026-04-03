@@ -358,7 +358,8 @@ public:
 
     // -- Style -----------------------------------------------------------
 
-    Properties& properties();
+    Node& set(Key key, Property value);
+
     Node& padding(const Edges&);
     Node& margin(const Edges&);
     Node& width(UIValue);

@@ -579,7 +579,11 @@ Node* Node::child(size_t index) {
 // Node — style / layout setters (fluent)
 // ===========================================================================
 
-Properties& Node::properties() { return iptr_->props; }
+Node& Node::set(Key key, Property value) {
+    iptr_->apply(key, value);
+    return *this;
+}
+
 Node& Node::padding(const Edges& e) {
     iptr_->props.set(Key::PaddingTop, e.top);
     iptr_->props.set(Key::PaddingRight, e.right);

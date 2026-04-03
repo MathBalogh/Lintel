@@ -138,6 +138,7 @@
     <ClCompile Include="iwindow.cpp" />
     <ClCompile Include="lexer.cpp" />
     <ClCompile Include="lintel.cpp" />
+    <ClCompile Include="LICENSE.txt" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="load.cpp" />
     <ClCompile Include="parser.cpp" />
@@ -163,6 +164,7 @@
     <ClInclude Include="visitor.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="CONTRIBUTING.md" />
     <None Include="language.md" />
     <None Include="README.md" />
     <None Include="test.ltl" />

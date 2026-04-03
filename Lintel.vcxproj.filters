@@ -43,6 +43,9 @@
     <Filter Include="lib\nodes\text">
       <UniqueIdentifier>{042f426d-8751-4da4-9b8e-1911dd0bfd18}</UniqueIdentifier>
     </Filter>
+    <Filter Include="github">
+      <UniqueIdentifier>{1b028367-6025-4feb-bf62-df27df0929b3}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="gpu.cpp">
@@ -99,6 +102,9 @@
     <ClCompile Include="visitor.cpp">
       <Filter>lib\language\ast</Filter>
     </ClCompile>
+    <ClCompile Include="LICENSE.txt">
+      <Filter>github</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="handle.h">
@@ -151,7 +157,12 @@
     <None Include="test.ltl">
       <Filter>src</Filter>
     </None>
-    <None Include="README.md" />
+    <None Include="README.md">
+      <Filter>github</Filter>
+    </None>
+    <None Include="CONTRIBUTING.md">
+      <Filter>github</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Image Include="image.jpg">

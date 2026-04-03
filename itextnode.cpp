@@ -733,4 +733,10 @@ std::wstring TextNode::selected_text() const {
     return n.content.substr(n.sel_start(), n.sel_end() - n.sel_start());
 }
 
+TextNode& TextNode::on(Event event, std::function<void(TextNode&)> callback) {
+    Node::on(event, [callback] (WeakNode node) {
+        callback(node->as<TextNode>());
+    });
+}
+
 } // namespace lintel

@@ -416,6 +416,8 @@ public:
     TextNode& select_all();
     TextNode& deselect();
     std::wstring selected_text() const;
+
+    TextNode& on(Event event, std::function<void(TextNode&)> callback);
 };
 
 // ---------------------------------------------------------------------------

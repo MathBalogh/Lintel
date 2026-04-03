@@ -42,8 +42,7 @@ void Canvas::fill_ellipse(float cx, float cy, float rx, float ry, Color c) {
 // Stroked shapes
 // ---------------------------------------------------------------------------
 
-void Canvas::stroke_rect(const Rect& r, Color c, float stroke_width,
-                         float corner_radius) {
+void Canvas::stroke_rect(const Rect& r, Color c, float stroke_width, float corner_radius) {
     if (stroke_width <= 0.f) return;
     auto brush = make_brush(c);
     if (!brush) return;
@@ -54,8 +53,7 @@ void Canvas::stroke_rect(const Rect& r, Color c, float stroke_width,
         dc()->DrawRectangle(to_d2df(r), brush.Get(), stroke_width);
 }
 
-void Canvas::draw_line(float x0, float y0, float x1, float y1,
-                       Color c, float width, ID2D1StrokeStyle* style) {
+void Canvas::draw_line(float x0, float y0, float x1, float y1, Color c, float width, ID2D1StrokeStyle* style) {
     auto brush = make_brush(c);
     if (!brush) return;
     dc()->DrawLine(D2D1::Point2F(x0, y0), D2D1::Point2F(x1, y1),
@@ -71,8 +69,7 @@ void Canvas::draw_text(std::wstring_view text, IDWriteTextFormat* fmt,
     if (text.empty() || !fmt) return;
     auto brush = make_brush(c);
     if (!brush) return;
-    dc()->DrawText(text.data(), static_cast<UINT32>(text.size()),
-                   fmt, to_d2df(layout_box), brush.Get());
+    dc()->DrawText(text.data(), static_cast<UINT32>(text.size()), fmt, to_d2df(layout_box), brush.Get());
 }
 
 // ---------------------------------------------------------------------------

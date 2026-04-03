@@ -24,15 +24,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             PostQuitMessage(0);
             return 0;
 
-            // Suppress background erase; the D2D/D3D pipeline owns every pixel.
+        // Suppress background erase; the D2D/D3D pipeline owns every pixel.
         case WM_ERASEBKGND:
             return 1;
 
-            // Resize the swap chain and UI texture synchronously on the message
-            // thread so the new content fills the window in the same frame that
-            // the window edge moves, eliminating the one-frame lag that causes
-            // resize jitter.  render_mut_ in resize_now() serialises this against
-            // any in-flight draw on the worker thread.
         case WM_SIZE:
             this_win->doc.resize_now();
             return 0;

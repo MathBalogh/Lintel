@@ -54,11 +54,11 @@ std::wstring IGraphNode::format_tick(float v, float step) {
 // ===========================================================================
 
 IGraphNode::Bounds IGraphNode::compute_bounds() const {
-    float xl = range_x_min, xh = range_x_max;
-    float yl = range_y_min, yh = range_y_max;
+    float xl = range_x_min.value, xh = range_x_max.value;
+    float yl = range_y_min.value, yh = range_y_max.value;
 
-    const bool auto_x = is_auto(xl) || is_auto(xh);
-    const bool auto_y = is_auto(yl) || is_auto(yh);
+    const bool auto_x = range_x_min.is_auto() || range_x_max.is_auto();
+    const bool auto_y = range_y_min.is_auto() || range_y_max.is_auto(); 
 
     if (auto_x || auto_y) {
         constexpr float INF = std::numeric_limits<float>::infinity();
@@ -86,13 +86,9 @@ IGraphNode::Bounds IGraphNode::compute_bounds() const {
 // draw_grid
 // ===========================================================================
 
-void IGraphNode::draw_grid(
-    const Bounds& b,
-    float px, float py, float pw, float ph,
-    Canvas& canvas) const {
-    const Color grid_col = attr.get_or<Color>(
-        property::GridColor, Color(0.16f, 0.16f, 0.20f, 1.f));
-    const float grid_w = attr.get_or<float>(property::GridWeight, 0.5f);
+void IGraphNode::draw_grid(const Bounds& b, float px, float py, float pw, float ph, Canvas& canvas) const {
+    const Color grid_col = props.get_or(Key::GridColor, Property::Type::Color, Color(0.16f, 0.16f, 0.20f, 1.f));
+    const float grid_w = props.get_or(Key::GridWeight, Property::Type::Float, 0.5f);
 
     const float xl = b.xl, xh = b.xh;
     const float yl = b.yl, yh = b.yh;
@@ -146,9 +142,8 @@ void IGraphNode::draw_labels(
     const Bounds& b,
     float px, float py, float pw, float ph,
     Canvas& canvas) const {
-    const Color label_col = attr.get_or<Color>(
-        property::LabelColor, Color(0.42f, 0.46f, 0.55f, 1.f));
-    const float label_sz = attr.get_or<float>(property::LabelFontSize, 10.5f);
+    const Color label_col = props.get_or(Key::LabelColor, Property::Type::Color, Color(0.42f, 0.46f, 0.55f, 1.f));
+    const float label_sz = props.get_or(Key::LabelFontSize, Property::Type::Float, 10.5f);
 
     const float xl = b.xl, xh = b.xh;
     const float yl = b.yl, yh = b.yh;
@@ -239,6 +234,7 @@ void IGraphNode::draw_series(
     }
 
     canvas.pop_clip();
+
 }
 
 // ===========================================================================
@@ -271,42 +267,27 @@ void IGraphNode::draw(Node& self, Canvas& canvas) {
 
 GraphNode::GraphNode(): Node(nullptr) {
     impl_allocate<IGraphNode>();
-    handle<IGraphNode>()->attr.set(property::Share, 1.f); // fill parent by default
+    iptr_->props.set(Key::Share, 1.f); // fill parent by default
 }
 
-GraphNode& GraphNode::push_series(
-    std::wstring_view  name,
-    std::vector<float> xs,
-    std::vector<float> ys,
-    Color              color,
-    float              weight) {
-    IGraphNode& g = *handle<IGraphNode>();
-    DataSeries  s;
-    s.name = name;
-    s.xs = std::move(xs);
-    s.ys = std::move(ys);
-    s.color = color;
-    s.weight = weight;
-    g.series.push_back(std::move(s));
-    return *this;
+DataSeries& GraphNode::get_series(size_t i) {
+    return handle<IGraphNode>()->series[i];
+}
+DataSeries& GraphNode::create_series() {
+    return handle<IGraphNode>()->series.emplace_back();
 }
 
 GraphNode& GraphNode::x_range(float lo, float hi) {
     IGraphNode& g = *handle<IGraphNode>();
-    g.range_x_min = lo;
-    g.range_x_max = hi;
+    g.range_x_min = UIValue::px(lo);
+    g.range_x_max = UIValue::px(hi);
     return *this;
 }
 
 GraphNode& GraphNode::y_range(float lo, float hi) {
     IGraphNode& g = *handle<IGraphNode>();
-    g.range_y_min = lo;
-    g.range_y_max = hi;
-    return *this;
-}
-
-GraphNode& GraphNode::clear_series() {
-    handle<IGraphNode>()->series.clear();
+    g.range_y_min = UIValue::px(lo);
+    g.range_y_max = UIValue::px(hi);
     return *this;
 }
 

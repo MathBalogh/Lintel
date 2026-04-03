@@ -1,5 +1,4 @@
 #include "itextnode.h"
-#include "framework.h"
 #include <dwrite.h>
 #include <d2d1.h>
 #include <cwctype>
@@ -25,69 +24,70 @@ static DWRITE_TEXT_ALIGNMENT dwrite_alignment(TextAlign a) {
 // Style synchronisation
 // ---------------------------------------------------------------------------
 //
-// Reads Prop-keyed values from the attr map into the local cached fields.
+// Reads property-keyed values from the props map into the local cached fields.
 // When any property affecting text metrics changes (font, size, weight, wrap),
-// attr.layout_dirty is set and the DWrite format is invalidated so that
+// props.layout_dirty is set and the DWrite format is invalidated so that
 // ITextNode::measure() recomputes the correct size on the next frame.
 //
 
 void ITextNode::sync_style() {
     bool changed = false; // true when a text-metric property changed
 
-    if (const std::wstring* v = attr.get<std::wstring>(property::FontFamily)) {
-        if (*v != font_family) { font_family = *v; changed = true; }
+    if (const auto* v = props.find(Key::FontFamily, Property::Type::WString)) {
+        if (v->get_wstring() != font_family) {
+            font_family = v->get_wstring();
+            changed = true;
+        }
     }
-    if (const float* v = attr.get<float>(property::FontSize)) {
-        if (*v != font_size) { font_size = *v; changed = true; }
+    if (const auto* v = props.find(Key::FontSize, Property::Type::Float)) {
+        if (v->get_float() != font_size) { font_size = *v; changed = true; }
     }
-    if (const Color* v = attr.get<Color>(property::TextColor)) {
-        text_color = *v; // colour change - no re-measure needed
+    if (const auto* v = props.find(Key::TextColor, Property::Type::Color)) {
+        text_color = *v;
     }
-    if (const bool* v = attr.get<bool>(property::Bold)) {
-        if (*v != bold) { bold = *v; changed = true; }
+    if (const auto* v = props.find(Key::Bold, Property::Type::Bool)) {
+        if (v->get_bool() != bold) { bold = *v; changed = true; }
     }
-    if (const bool* v = attr.get<bool>(property::Italic)) {
-        if (*v != italic_val) { italic_val = *v; changed = true; }
+    if (const auto* v = props.find(Key::Italic, Property::Type::Bool)) {
+        if (v->get_bool() != italic_val) { italic_val = *v; changed = true; }
     }
-    if (const bool* v = attr.get<bool>(property::Wrap)) {
-        if (*v != wrap) { wrap = *v; changed = true; }
+    if (const auto* v = props.find(Key::Wrap, Property::Type::Bool)) {
+        if (v->get_bool() != wrap) { wrap = *v; changed = true; }
     }
-    // TextAlign is stored as float (integer cast) - same convention as Direction.
-    if (const float* v = attr.get<float>(property::TextAlign)) {
+    // TextAlign is stored as float (integer cast) — same convention as Direction.
+    if (const auto* v = props.find(Key::TextAlign, Property::Type::Float)) {
         TextAlign ta = static_cast<TextAlign>(static_cast<int>(*v));
         if (ta != text_align_val) { text_align_val = ta; changed = true; }
     }
 
-    // new vertical center & scrollbar
     {
         bool prev = vertical_center;
-        vertical_center = attr.get_or<bool>(property::VerticalCenter, false);
+        vertical_center = props.get(Key::VerticalCenter);
         if (prev != vertical_center) invalidate_format();
     }
     {
         bool prev = scrollbar_enabled;
-        scrollbar_enabled = attr.get_or<bool>(property::Scrollbar, false);
-        if (prev != scrollbar_enabled) attr.layout_dirty = true;
+        scrollbar_enabled = props.get(Key::Scrollbar);
+        if (prev != scrollbar_enabled) props.make_dirty();
     }
 
-    editable = attr.get_or<bool>(property::Editable, false);
+    editable = props.get(Key::Editable);
 
     if (changed) {
         // Text-metric changes affect measured size: force a layout pass and
         // rebuild the DWrite format so the next draw picks up the change.
-        attr.layout_dirty = true;
+        props.make_dirty();
         invalidate_format();
     }
 }
 
-void ITextNode::apply_callback(Property p) {
-    // TODO: cache
-    if (p == FRAMEWORK.get_property("content")) {
-        if (auto* str = attr.get<std::wstring>(p)) {
-            content = *str;
+void ITextNode::apply_callback(Key key) {
+    if (key == get_key("content")) {
+        if (const auto* str = props.find(key, Property::Type::WString)) {
+            content = str->get_wstring();
             content_height_ = 0.f;
             scroll_offset_y = 0.f;
-            attr.layout_dirty = true;
+            props.make_dirty();
         }
     }
 }
@@ -118,12 +118,12 @@ void ITextNode::wire_events(Node& handle) {
             float ty_rel = thumb_y() - content_y();
 
             if (my_rel >= ty_rel && my_rel < ty_rel + th) {
-                // clicked on thumb -> start drag
+                // clicked on thumb → start drag
                 scrollbar_dragging = true;
                 scrollbar_drag_offset = my_rel - ty_rel;
             }
             else {
-                // clicked on track -> jump
+                // clicked on track → jump
                 float frac = my_rel / inner_h();
                 scroll_offset_y = frac * get_max_scroll();
                 clamp_scroll();
@@ -180,19 +180,19 @@ void ITextNode::wire_events(Node& handle) {
             case VK_HOME: on_move_home(shift); break;
             case VK_END:  on_move_end(shift);  break;
 
-            case 0x41: // Ctrl+A - select all
+            case 0x41: // Ctrl+A — select all
                 if (ctrl) { selection_anchor = 0; caret_pos = content.size(); }
                 break;
-            case 0x43: // Ctrl+C - copy
+            case 0x43: // Ctrl+C — copy
                 if (ctrl) copy_to_clipboard();
                 break;
-            case 0x58: // Ctrl+X - cut
+            case 0x58: // Ctrl+X — cut
                 if (ctrl && editable) {
                     copy_to_clipboard();
                     if (has_selection()) delete_selection();
                 }
                 break;
-            case 0x56: // Ctrl+V - paste
+            case 0x56: // Ctrl+V — paste
                 if (ctrl && editable) paste_from_clipboard();
                 break;
 
@@ -210,13 +210,13 @@ void ITextNode::wire_events(Node& handle) {
 void ITextNode::ensure_format() {
     if (fmt) return;
 
-    fmt = CANVAS.make_text_format(
-        font_family.c_str(), font_size, bold, italic_val, wrap);
+    // TODO: wasteful
+    fmt = CANVAS.make_text_format(font_family.c_str(), font_size, bold, italic_val, wrap);
 
     if (fmt) {
         fmt->SetTextAlignment(dwrite_alignment(text_align_val));
-        // vertical alignment is CENTER only when explicitly requested AND
-        // we are not using a scrollbar (scrollbar forces top alignment)
+        // Vertical alignment is CENTER only when explicitly requested AND
+        // we are not using a scrollbar (scrollbar forces top alignment).
         DWRITE_PARAGRAPH_ALIGNMENT pa = (vertical_center && !scrollbar_enabled)
             ? DWRITE_PARAGRAPH_ALIGNMENT_CENTER
             : DWRITE_PARAGRAPH_ALIGNMENT_NEAR;
@@ -232,54 +232,56 @@ ComPtr<IDWriteTextLayout> ITextNode::make_layout(float max_w, float max_h) const
 }
 
 // ---------------------------------------------------------------------------
-// Layout - measure & arrange
+// Layout — measure & arrange
 // ---------------------------------------------------------------------------
 
 void ITextNode::measure(float avail_w, float avail_h) {
-    // sync_style may set attr.layout_dirty if a text-metric prop changed.
-    // It must run before the early-exit guard so those changes are detected.
+    // sync_style() may set props.layout_dirty if a text-metric property changed.
+    // It must run before the skip guard so those changes are detected this frame.
     sync_style();
 
-    if (!attr.layout_dirty &&
-        avail_w == cached_avail_w_ &&
-        avail_h == cached_avail_h_)
-        return;
+    // Delegate to the base skip guard, which also accounts for active tweens.
+    if (can_skip_measure(avail_w, avail_h)) return;
 
-    const Edges margin = layout_margin();
-
-    rect.w = is_auto(layout_width())
-        ? std::max(0.f, avail_w - margin.horizontal())
-        : layout_width();
-    rect.h = is_auto(layout_height()) ? 0.f : layout_height();
+    // Resolve rect.w / rect.h from layout_width/height and the available space.
+    // This handles pixels, percent, and the auto-fills-available-space case the
+    // same way the base node does — text then overrides the height (and
+    // optionally the width) below once we have DWrite metrics.
+    measure_self_size(avail_w, avail_h);
 
     ensure_format();
     if (content.empty() || !fmt) {
         content_height_ = 0.f;
-        if (is_auto(layout_height()))
+        // Auto height with no content: collapse to padding only.
+        if (layout_height().is_auto())
             rect.h = layout_padding().vertical();
+
         cached_avail_w_ = avail_w;
         cached_avail_h_ = avail_h;
-        attr.layout_dirty = false;
+        props.make_clean();
         return;
     }
 
+    // Build a layout wide enough to measure the natural text extents.
+    // Non-wrapped text uses an effectively infinite width so DWrite reports the
+    // true single-line width; wrapped text is constrained to the content area.
     const float layout_w = wrap ? text_inner_w() : 1e6f;
 
-    ComPtr<IDWriteTextLayout> layout = make_layout(layout_w);
+    ComPtr<IDWriteTextLayout> layout = make_layout(layout_w, 1e6f);
     if (layout) {
         DWRITE_TEXT_METRICS m{};
         layout->GetMetrics(&m);
         content_height_ = m.height;
 
-        // Only shrink the node's width when it's a single-line (non-wrapped) auto node.
-        // Wrapped auto nodes should fill the available width (standard text-area behavior).
-        if (is_auto(layout_width()) && !wrap) {
+        // Single-line (non-wrapped) auto nodes shrink to their text width.
+        // Wrapped auto nodes fill the available width (standard text-area behaviour).
+        if (layout_width().is_auto() && !wrap) {
             rect.w = m.widthIncludingTrailingWhitespace
                 + layout_padding().horizontal()
                 + (scrollbar_enabled ? scrollbar_width() : 0.f);
         }
 
-        if (is_auto(layout_height()))
+        if (layout_height().is_auto())
             rect.h = m.height + layout_padding().vertical();
     }
 
@@ -288,7 +290,7 @@ void ITextNode::measure(float avail_w, float avail_h) {
 
     cached_avail_w_ = avail_w;
     cached_avail_h_ = avail_h;
-    attr.layout_dirty = false;
+    props.make_clean();
 }
 
 void ITextNode::arrange(float slot_x, float slot_y) {
@@ -338,23 +340,22 @@ void ITextNode::ensure_caret_visible() {
     }
 
     ensure_format();
-    float lw = (!wrap) ? 1e6f : text_inner_w();
+    const float lw = wrap ? text_inner_w() : 1e6f;
     ComPtr<IDWriteTextLayout> layout = make_layout(lw, 1e6f);
     if (!layout) return;
 
     float cpx = 0.f, cpy = 0.f;
     DWRITE_HIT_TEST_METRICS h{};
     layout->HitTestTextPosition(static_cast<UINT32>(caret_pos), FALSE, &cpx, &cpy, &h);
-    float caret_top = cpy;
-    float caret_bot = cpy + std::max(h.height, font_size);
-    float view_top = scroll_offset_y;
-    float view_bot = scroll_offset_y + inner_h();
-    if (caret_top < view_top) {
-        scroll_offset_y = caret_top;
-    }
-    else if (caret_bot > view_bot) {
-        scroll_offset_y = caret_bot - inner_h();
-    }
+
+    const float caret_top = cpy;
+    const float caret_bot = cpy + std::max(h.height, font_size);
+    const float view_top = scroll_offset_y;
+    const float view_bot = scroll_offset_y + inner_h();
+
+    if (caret_top < view_top) scroll_offset_y = caret_top;
+    else if (caret_bot > view_bot) scroll_offset_y = caret_bot - inner_h();
+
     clamp_scroll();
 }
 
@@ -362,7 +363,8 @@ void ITextNode::ensure_caret_visible() {
 // Selection highlight rendering
 // ---------------------------------------------------------------------------
 
-void ITextNode::draw_selection(const ComPtr<IDWriteTextLayout>& layout, Canvas& canvas, float y_offset) const {
+void ITextNode::draw_selection(
+    const ComPtr<IDWriteTextLayout>& layout, Canvas& canvas, float y_offset) const {
     if (!has_selection() || !layout) return;
 
     const UINT32 range_start = static_cast<UINT32>(sel_start());
@@ -403,40 +405,39 @@ void ITextNode::draw(Node& handle, Canvas& canvas) {
 
     clamp_scroll();
 
-    const float lw = (!wrap) ? 1e6f : text_inner_w();
+    const float lw = wrap ? text_inner_w() : 1e6f;
     ComPtr<IDWriteTextLayout> layout =
         content.empty() ? ComPtr<IDWriteTextLayout>{} : make_layout(lw, 1e6f);
 
-    // clip all text / selection / caret rendering to the visible content area
+    // Clip all text / selection / caret rendering to the visible content area.
     const Rect clip_rect{ content_x(), content_y(), text_inner_w(), inner_h() };
     canvas.push_clip(clip_rect);
 
     draw_selection(layout, canvas, scroll_offset_y);
 
     if (!content.empty()) {
-        const Rect text_rect{ content_x(), content_y() - scroll_offset_y, text_inner_w(), inner_h() };
+        const Rect text_rect{
+            content_x(), content_y() - scroll_offset_y,
+            text_inner_w(), inner_h() };
         canvas.draw_text(content, fmt.Get(), text_rect, text_color);
     }
 
     canvas.pop_clip();
-    // Caret + scrollbar (drawn *outside* the text clip)
+
+    // Caret + scrollbar are drawn outside the text clip.
     if (editable && has_focus) {
         if (content.empty()) {
-            // Special-case empty text - avoids DWrite's phantom-line quirk entirely
+            // Special-case empty text: avoids DWrite's phantom-line quirk.
             const float cx = content_x();
-            float cy = content_y();
+            float       cy = content_y();
 
-            // Optional: respect vertical_center when no scrollbar (mimics paragraph alignment)
-            if (vertical_center && !scrollbar_enabled) {
-                const float line_h = font_size;  // good enough approximation
-                cy += (inner_h() - line_h) * 0.5f;
-            }
+            // Respect vertical_center when no scrollbar (mirrors paragraph alignment).
+            if (vertical_center && !scrollbar_enabled)
+                cy += (inner_h() - font_size) * 0.5f;
 
-            const float ch = font_size;
-            canvas.draw_line(cx, cy, cx, cy + ch, text_color, 1.0f);
+            canvas.draw_line(cx, cy, cx, cy + font_size, text_color, 1.0f);
         }
         else if (layout) {
-            // Original non-empty caret code (unchanged)
             float caret_px = 0.f, caret_py = 0.f;
             DWRITE_HIT_TEST_METRICS hit{};
             layout->HitTestTextPosition(
@@ -451,18 +452,20 @@ void ITextNode::draw(Node& handle, Canvas& canvas) {
         }
     }
 
-    // Scrollbar must be drawn whenever it is visible (even if not focused/empty)
     if (is_scrollbar_visible()) {
-        const float view_h = inner_h();
-        const float th = thumb_height();
-        const float ty = thumb_y();
         const float sb_x = content_x() + text_inner_w();
         const float sb_y = content_y();
+        const float th = thumb_height();
+        const float ty = thumb_y();
 
         // track
-        canvas.fill_rect(Rect{ sb_x, sb_y, scrollbar_width(), view_h }, Color(0.15f, 0.15f, 0.15f, 0.6f));
+        canvas.fill_rect(
+            Rect{ sb_x, sb_y, scrollbar_width(), inner_h() },
+            Color(0.15f, 0.15f, 0.15f, 0.6f));
         // thumb
-        canvas.fill_rect(Rect{ sb_x, ty, scrollbar_width(), th }, Color(0.4f, 0.4f, 0.4f, 0.9f));
+        canvas.fill_rect(
+            Rect{ sb_x, ty, scrollbar_width(), th },
+            Color(0.4f, 0.4f, 0.4f, 0.9f));
     }
 }
 
@@ -484,7 +487,7 @@ void ITextNode::delete_selection() {
     caret_pos = s;
     selection_anchor = s;
     content_height_ = 0.f;
-    attr.layout_dirty = true;
+    props.make_dirty();
     invalidate_format();
     if (editable && has_focus) ensure_caret_visible();
 }
@@ -518,15 +521,16 @@ void ITextNode::on_click_position(float lx, float ly, bool extend) {
     ensure_format();
     if (!fmt) return;
 
-    const float lw = (!wrap) ? 1e6f : text_inner_w();
+    const float lw = wrap ? text_inner_w() : 1e6f;
     ComPtr<IDWriteTextLayout> layout = make_layout(lw, 1e6f);
     if (!layout) return;
 
-    // adjust hit-test y for current scroll offset
-    float layout_ly = ly + scroll_offset_y;
+    // Adjust hit-test y for current scroll offset.
+    const float layout_ly = ly + scroll_offset_y;
     BOOL is_trailing = FALSE, is_inside = FALSE;
     DWRITE_HIT_TEST_METRICS m{};
     layout->HitTestPoint(lx, layout_ly, &is_trailing, &is_inside, &m);
+
     size_t pos = m.textPosition + (is_trailing ? 1u : 0u);
     pos = std::min(pos, content.size());
     set_caret(pos, extend);
@@ -561,7 +565,7 @@ void ITextNode::on_input(wchar_t ch) {
         content.insert(
             content.begin() + static_cast<std::wstring::difference_type>(caret_pos), ch);
         set_caret(caret_pos + 1, false);
-        attr.layout_dirty = true;
+        props.make_dirty();
         invalidate_format();
     }
 }
@@ -572,15 +576,16 @@ void ITextNode::on_backspace() {
     content.erase(content.begin() +
                   static_cast<std::wstring::difference_type>(caret_pos - 1));
     set_caret(caret_pos - 1, false);
-    attr.layout_dirty = true;
+    props.make_dirty();
     invalidate_format();
 }
 
 void ITextNode::on_delete() {
     if (has_selection()) { delete_selection(); return; }
     if (caret_pos >= content.size()) return;
-    content.erase(content.begin() + static_cast<std::wstring::difference_type>(caret_pos));
-    attr.layout_dirty = true;
+    content.erase(content.begin() +
+                  static_cast<std::wstring::difference_type>(caret_pos));
+    props.make_dirty();
     invalidate_format();
 }
 
@@ -638,18 +643,19 @@ void ITextNode::paste_from_clipboard() {
 TextNode::TextNode(): Node(nullptr) {
     impl_allocate<ITextNode>();
     ITextNode& n = *handle<ITextNode>();
-    n.attr.set(property::Share, 0.f);
-    n.attr.layout_dirty = true;
+    n.props.set(Key::Share, 0.f);
+    n.props.make_dirty();
     n.invalidate_format();
     n.wire_events(*this);
 }
-TextNode::TextNode(std::wstring_view initial_content): Node(nullptr) {
+
+TextNode::TextNode(const std::wstring& initial_content): Node(nullptr) {
     impl_allocate<ITextNode>();
     ITextNode& n = *handle<ITextNode>();
     n.content = initial_content;
-    n.attr.set(FRAMEWORK.get_property("content"), std::wstring(initial_content));
-    n.attr.set(property::Share, 0.f);
-    n.attr.layout_dirty = true;
+    n.props.set(get_key("content"), initial_content);
+    n.props.set(Key::Share, 0.f);
+    n.props.make_dirty();
     n.invalidate_format();
     n.caret_pos = 0;
     n.content_height_ = 0.f;
@@ -657,46 +663,46 @@ TextNode::TextNode(std::wstring_view initial_content): Node(nullptr) {
     n.wire_events(*this);
 }
 
-TextNode& TextNode::content(std::wstring_view c) {
+TextNode& TextNode::content(const std::wstring& c) {
     ITextNode& n = *handle<ITextNode>();
     n.content = c;
-    n.attr.set(FRAMEWORK.get_property("content"), std::wstring(c)); // Keep the property system in sync to avoid latent artifacts
+    n.props.set(get_key("content"), c);
     n.caret_pos = 0;
     n.content_height_ = 0.f;
     n.scroll_offset_y = 0.f;
-    n.attr.layout_dirty = true;
+    n.props.make_dirty();
     n.invalidate_format();
     return *this;
 }
+
 TextNode& TextNode::clear_content() {
     return content(L"");
 }
+
 std::wstring& TextNode::content() {
     return handle<ITextNode>()->content;
 }
 
 TextNode& TextNode::text_align(TextAlign a) {
-    // Stored as float (integer cast) - sync_style() casts back to TextAlign.
-    handle<ITextNode>()->attr.set(property::TextAlign,
-                                  static_cast<float>(static_cast<int>(a)));
-    handle<ITextNode>()->invalidate_format();
+    // Stored as float (integer cast) — sync_style() casts back to TextAlign.
+    ITextNode& n = *handle<ITextNode>();
+    n.props.set(Key::TextAlign, static_cast<float>(static_cast<int>(a)));
+    n.invalidate_format();
     return *this;
 }
 
-/** Enable / disable the optional vertical scrollbar (shown when text overflows). */
 TextNode& TextNode::scrollbar(bool enable) {
     ITextNode& n = *handle<ITextNode>();
     n.scrollbar_enabled = enable;
-    n.attr.set(property::Scrollbar, enable);
-    n.attr.layout_dirty = true;           // width may change
+    n.props.set(Key::Scrollbar, enable);
+    n.props.make_dirty(); // width may change (scrollbar_width() added/removed)
     return *this;
 }
 
-/** Center text vertically inside the node (uses DWrite paragraph alignment). */
 TextNode& TextNode::center_vertically(bool center) {
     ITextNode& n = *handle<ITextNode>();
     n.vertical_center = center;
-    n.attr.set(property::VerticalCenter, center);
+    n.props.set(Key::VerticalCenter, center);
     n.invalidate_format();
     return *this;
 }

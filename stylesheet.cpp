@@ -2,19 +2,10 @@
 //
 // Implements StyleSheet: the resolved, AST-independent style store.
 //
-// This file is the new home for all prop-dispatch logic.  Previously this
-// lived in three almost-identical forms inside load.cpp:
-//
-//   • apply_one_prop()       - snap application during tree build
-//   • animate_one_prop()     - animated application during event dispatch
-//   • resolve_props()        - conversion of AST nodes → ResolvedProps
-//
-// All three collapsed into StyleSheet::dispatch_prop() with a Mode parameter.
-// The ~120 lines of duplicated dispatch are now ~60 lines that both load() and
-// runtime apply() share.
+// Now fully compatible with the new templated Attributes + UIValue system.
+// PropValue / std::variant has been removed everywhere.
 
-#include "inode.h"          // INode::apply, INode::animate_prop
-#include "framework.h"      // FRAMEWORK.get_property(), get_event()
+#include "inode.h"          // INode::apply, INode::animate_prop + UIValue
 
 #include <charconv>
 #include <cwchar>
@@ -27,19 +18,54 @@ namespace lintel {
 
 namespace {
 
-// ── Shorthand expansion: padding / margin ────────────────────────────────────
-//
-// Accepts either a single float (all sides) or a wstring of 1, 2, or 4
-// space-separated values following the CSS convention:
-//   "8"          → all sides 8
-//   "4 8"        → vertical 4, horizontal 8
-//   "4 8 4 8"    → top right bottom left
+// ── UIValue parser (width / height) ─────────────────────────────────────────
+// Accepts numbers (legacy), "auto", "100px", "50%", "50.5%"
 
-static Edges parse_edges(const PropValue& raw) {
-    if (const float* f = std::get_if<float>(&raw))
+static UIValue parse_ui_value(const std::any& raw) {
+    if (const float* f = std::any_cast<const float>(&raw))
+        return UIValue::px(*f);
+
+    if (const std::wstring* ws = std::any_cast<const std::wstring>(&raw)) {
+        std::wstring s = *ws;
+        // trim whitespace (simple)
+        while (!s.empty() && std::iswspace(s.front())) s.erase(s.begin());
+        while (!s.empty() && std::iswspace(s.back())) s.pop_back();
+
+        if (s == L"auto")
+            return UIValue::make_auto();
+
+        // percent?
+        if (!s.empty() && s.back() == L'%') {
+            s.pop_back();
+            std::string narrow = to_string(s);
+            float pct = 0.f;
+            std::from_chars(narrow.data(), narrow.data() + narrow.size(), pct);
+            return UIValue::pct(pct / 100.f);
+        }
+
+        // pixels (with or without "px" suffix)
+        if (!s.empty() && (std::iswdigit(s[0]) || s[0] == L'-' || s[0] == L'.')) {
+            if (s.size() >= 3 && s.substr(s.size() - 2) == L"px")
+                s = s.substr(0, s.size() - 2);
+
+            std::string narrow = to_string(s);
+            float px = 0.f;
+            std::from_chars(narrow.data(), narrow.data() + narrow.size(), px);
+            return UIValue::px(px);
+        }
+
+        std::cerr << "stylesheet: bad UIValue '" << to_string(*ws) << "' - defaulting to auto\n";
+    }
+    return UIValue::make_auto();
+}
+
+// ── Shorthand expansion: padding / margin ────────────────────────────────────
+
+static Edges parse_edges(const std::any& raw) {
+    if (const float* f = std::any_cast<const float>(&raw))
         return Edges(*f);
 
-    if (const std::wstring* ws = std::get_if<std::wstring>(&raw)) {
+    if (const std::wstring* ws = std::any_cast<const std::wstring>(&raw)) {
         std::vector<float> vals;
         size_t i = 0;
         while (i < ws->size()) {
@@ -49,7 +75,7 @@ static Edges parse_edges(const PropValue& raw) {
             while (j < ws->size() && !std::iswspace((*ws)[j])) ++j;
 
             std::wstring tok = ws->substr(i, j - i);
-            std::string  narrow_tok = narrow(tok);
+            std::string narrow_tok = to_string(tok);
             float f = 0.f;
             std::from_chars(narrow_tok.data(),
                             narrow_tok.data() + narrow_tok.size(), f);
@@ -65,59 +91,12 @@ static Edges parse_edges(const PropValue& raw) {
     return Edges(0.f);
 }
 
-// ── Transition installation ───────────────────────────────────────────────────
-//
-// Spec format (narrow string): "<property-name> <duration-seconds> <easing>"
-// Example: "background-color 0.2 ease-out"
-
-static void install_transition(Node& n, const std::wstring& spec_w) {
-    const std::string spec = narrow(spec_w);
-
-    std::vector<std::string_view> tokens;
-    for (size_t i = 0; i < spec.size(); ) {
-        while (i < spec.size() && std::isspace(static_cast<unsigned char>(spec[i]))) ++i;
-        if (i >= spec.size()) break;
-        size_t j = i;
-        while (j < spec.size() && !std::isspace(static_cast<unsigned char>(spec[j]))) ++j;
-        tokens.emplace_back(std::string_view(spec).substr(i, j - i));
-        i = j;
-    }
-    if (tokens.empty()) return;
-
-    Property prop = FRAMEWORK.get_property(std::string(tokens[0]));
-    if (prop == 0) {
-        std::cerr << "stylesheet: unknown property '" << tokens[0]
-            << "' in transition spec - skipped\n";
-        return;
-    }
-
-    TransitionSpec ts;
-    if (tokens.size() >= 2)
-        std::from_chars(tokens[1].data(), tokens[1].data() + tokens[1].size(),
-                        ts.duration);
-    if (tokens.size() >= 3) {
-        const auto& ek = tokens[2];
-        if (ek == "linear")      ts.easing = Easing::Linear;
-        else if (ek == "ease-in")     ts.easing = Easing::EaseIn;
-        else if (ek == "ease-out")    ts.easing = Easing::EaseOut;
-        else if (ek == "ease-in-out") ts.easing = Easing::EaseInOut;
-        else if (ek == "spring")      ts.easing = Easing::Spring;
-    }
-    n.handle<INode>()->transitions_[prop] = ts;
-}
-
 } // anonymous namespace
 
 // ─── StyleSheet::dispatch_prop ────────────────────────────────────────────────
-//
-// Central dispatch for a single key/value pair.
-// Mode::Snap   → INode::apply()         (immediate write to Attributes)
-// Mode::Animate → INode::animate_prop() (through the tween system)
 
 /*static*/
-void StyleSheet::dispatch_prop(Node& n, std::string_view key,
-                               const PropValue& val, Mode mode) {
-
+void StyleSheet::dispatch_prop(Node& n, std::string_view key, const Property& val) {
     INode* impl = n.handle<INode>();
     if (!impl) return;
 
@@ -126,150 +105,123 @@ void StyleSheet::dispatch_prop(Node& n, std::string_view key,
     if (key == "padding") { n.padding(parse_edges(val)); return; }
     if (key == "margin") { n.margin(parse_edges(val));  return; }
 
-    // ── transition (install only, never animated) ────────────────────────────
+    // ── width / height now use UIValue ───────────────────────────────────────
 
-    if (key == "transition") {
-        if (const std::wstring* w = std::get_if<std::wstring>(&val))
-            install_transition(n, *w);
+    if (key == "width") {
+        UIValue uv = parse_ui_value(val);
+        n.width(uv);
+        return;
+    }
+    if (key == "height") {
+        UIValue uv = parse_ui_value(val);
+        n.height(uv);
         return;
     }
 
-    // ── Enum-valued properties ────────────────────────────────────────────────
-    //
-    // These are stored as float (int cast) in Attributes because PropValue
-    // has no enum slot.  The wstring check below reads the declarative name
-    // from the .lintel file; programmatic callers may also pass a float.
+    // ── Enum-valued properties (still stored as float) ───────────────────────
 
     if (key == "direction") {
-        float fval = 0.f;
-        if (const std::wstring* w = std::get_if<std::wstring>(&val)) {
-            Direction d = (*w == L"row") ? Direction::Row : Direction::Column;
-            fval = static_cast<float>(static_cast<int>(d));
+        unsigned int fval = (unsigned int) Direction::Column;
+        if (val.is_wstring()) {
+            fval = (val.get_wstring() == L"row")
+                ? (unsigned int) Direction::Row
+                : (unsigned int) Direction::Column;
         }
-        else if (const float* f = std::get_if<float>(&val)) {
-            fval = *f;
+        else if (val.is_enum()) {
+            fval = val.get_enum();
         }
-        if (mode == Mode::Snap)
-            impl->apply(property::Direction, fval);
-        else
-            impl->animate_prop(property::Direction, fval);
+        impl->apply(Key::Direction, fval);
         return;
     }
 
     if (key == "align") {
-        float fval = static_cast<float>(static_cast<int>(Align::Stretch));
-        if (const std::wstring* w = std::get_if<std::wstring>(&val)) {
+        unsigned int fval = (unsigned int) Align::Stretch;
+        if (val.is_wstring()) {
             Align a = Align::Stretch;
-            if (*w == L"start")  a = Align::Start;
-            else if (*w == L"center") a = Align::Center;
-            else if (*w == L"end")    a = Align::End;
-            fval = static_cast<float>(static_cast<int>(a));
+            if (val.get_wstring() == L"start") a = Align::Start;
+            else if (val.get_wstring() == L"center") a = Align::Center;
+            else if (val.get_wstring() == L"end") a = Align::End;
+            fval = (unsigned int) a;
         }
-        else if (const float* f = std::get_if<float>(&val)) {
-            fval = *f;
+        else if (val.is_enum()) {
+            fval = val.get_enum();
         }
-        if (mode == Mode::Snap)
-            impl->apply(property::AlignItems, fval);
-        else
-            impl->animate_prop(property::AlignItems, fval);
+        impl->apply(Key::AlignItems, fval);
         return;
     }
 
     if (key == "justify") {
-        float fval = static_cast<float>(static_cast<int>(Justify::Start));
-        if (const std::wstring* w = std::get_if<std::wstring>(&val)) {
+        unsigned int fval = (unsigned int) Justify::Start;
+        if (val.is_wstring()) {
             Justify j = Justify::Start;
-            if (*w == L"center")        j = Justify::Center;
-            else if (*w == L"end")           j = Justify::End;
-            else if (*w == L"space-between") j = Justify::SpaceBetween;
-            else if (*w == L"space-around")  j = Justify::SpaceAround;
-            fval = static_cast<float>(static_cast<int>(j));
+            if (val == L"center") j = Justify::Center;
+            else if (val == L"end") j = Justify::End;
+            else if (val == L"space-between") j = Justify::SpaceBetween;
+            else if (val == L"space-around") j = Justify::SpaceAround;
+            fval = (unsigned int) j;
         }
-        else if (const float* f = std::get_if<float>(&val)) {
-            fval = *f;
+        else if (val.is_enum()) {
+            fval = val.get_enum();
         }
-        if (mode == Mode::Snap)
-            impl->apply(property::JustifyItems, fval);
-        else
-            impl->animate_prop(property::JustifyItems, fval);
+        impl->apply(Key::JustifyItems, fval);
         return;
     }
 
     if (key == "text-align") {
-        float fval = static_cast<float>(static_cast<int>(TextAlign::Left));
-        if (const std::wstring* w = std::get_if<std::wstring>(&val)) {
+        unsigned int fval = (unsigned int) TextAlign::Left;
+        if (val.is_wstring()) {
             TextAlign ta = TextAlign::Left;
-            if (*w == L"center")  ta = TextAlign::Center;
-            else if (*w == L"right")   ta = TextAlign::Right;
-            else if (*w == L"justify") ta = TextAlign::Justify;
-            fval = static_cast<float>(static_cast<int>(ta));
+            if (val == L"center") ta = TextAlign::Center;
+            else if (val == L"right") ta = TextAlign::Right;
+            else if (val == L"justify") ta = TextAlign::Justify;
+            fval = (unsigned int) ta;
         }
-        else if (const float* f = std::get_if<float>(&val)) {
-            fval = *f;
+        else if (val.is_enum()) {
+            fval = val.get_enum();
         }
-        if (mode == Mode::Snap)
-            impl->apply(property::TextAlign, fval);
-        else
-            impl->animate_prop(property::TextAlign, fval);
+        impl->apply(Key::TextAlign, fval);
         return;
     }
 
     // ── Behaviour flags (not animatable) ────────────────────────────────────
 
     if (key == "focusable") {
-        if (const bool* b = std::get_if<bool>(&val)) n.focusable(*b);
+        if (val.is_bool()) n.focusable(val);
         return;
     }
     if (key == "draggable") {
-        if (const bool* b = std::get_if<bool>(&val)) n.draggable(*b);
+        if (val.is_bool()) n.draggable(val);
         return;
     }
 
     // ── Generic framework property ───────────────────────────────────────────
 
-    Property p = FRAMEWORK.get_property(std::string(key));
-    if (p == 0) {
+    Key p = get_key(std::string(key));
+    if (p == Key::Null) {
         std::cerr << "stylesheet: unknown property '" << key << "' - skipped\n";
         return;
     }
 
-    if (mode == Mode::Snap)
-        impl->apply(p, val);
-    else
-        impl->animate_prop(p, val);
+    impl->apply(p, val);
 }
 
-// ─── StyleSheet::apply_props / wire_handlers ──────────────────────────────────
+// ─── StyleSheet::apply_props / wire_handlers / animate / apply ────────────────
 
 /*static*/
-void StyleSheet::apply_props(Node& n, const std::vector<Prop>& props, Mode mode) {
+void StyleSheet::apply_props(Node& n, const std::vector<Prop>& props) {
     for (const Prop& p : props)
-        dispatch_prop(n, p.key, p.value, mode);
+        dispatch_prop(n, p.key, p.value);
 }
 
 /*static*/
 void StyleSheet::wire_handlers(Node& n, const std::vector<Handler>& handlers) {
     for (const Handler& h : handlers) {
-        // Capture deltas by value so the lambda is self-contained even after
-        // the StyleSheet or the AST is freed.  Use shared_ptr so nodes that
-        // share the same style don't each copy the vector.
-        auto shared_deltas =
-            std::make_shared<const std::vector<Prop>>(h.deltas);
-
-        n.on(h.event, [shared_deltas] (WeakNode self) {
-            StyleSheet::animate(self.as(), *shared_deltas);
+        auto shared_deltas = std::make_shared<const std::vector<Prop>>(h.deltas);
+        n.on(h.event, [h] (WeakNode self) {
+            StyleSheet::apply_props(self.as(), h.deltas);
         });
     }
 }
-
-// ─── StyleSheet::animate ──────────────────────────────────────────────────────
-
-/*static*/
-void StyleSheet::animate(Node& n, const std::vector<Prop>& deltas) {
-    apply_props(n, deltas, Mode::Animate);
-}
-
-// ─── StyleSheet::apply ────────────────────────────────────────────────────────
 
 void StyleSheet::apply(Node& n, std::string_view style_name) const {
     auto it = styles_.find(std::string(style_name));
@@ -278,7 +230,7 @@ void StyleSheet::apply(Node& n, std::string_view style_name) const {
         return;
     }
     const Style& s = it->second;
-    apply_props(n, s.props, Mode::Snap);
+    apply_props(n, s.props);
     wire_handlers(n, s.handlers);
 }
 
@@ -300,13 +252,10 @@ void StyleSheet::register_node(const std::string& name, WeakNode node) {
     named_[name] = node;
 }
 WeakNode StyleSheet::find(const char* name) {
-    if (auto it = named_.find(name); it != named_.end()) {
+    if (auto it = named_.find(name); it != named_.end())
         return it->second;
-    }
     return WeakNode(nullptr);
 }
-
-// ─── Query ────────────────────────────────────────────────────────────────────
 
 bool StyleSheet::has_style(std::string_view name) const {
     return styles_.count(std::string(name)) != 0;

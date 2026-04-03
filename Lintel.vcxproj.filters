@@ -7,64 +7,61 @@
     <Filter Include="src">
       <UniqueIdentifier>{c830aa5f-c4cc-4ad6-b7f3-34fa96747149}</UniqueIdentifier>
     </Filter>
-    <Filter Include="lib\core">
-      <UniqueIdentifier>{e4e43b06-b9f2-424a-b444-aa4c4d55c3ff}</UniqueIdentifier>
-    </Filter>
     <Filter Include="lib\api">
       <UniqueIdentifier>{9a76d90c-c5d7-4900-8224-adf682be1717}</UniqueIdentifier>
     </Filter>
-    <Filter Include="lib\core\gpu">
-      <UniqueIdentifier>{b1ba17ee-f9da-400b-bc07-7cf23fbb52b4}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="lib\core\language">
-      <UniqueIdentifier>{c5ad18c5-e0f1-4f60-9311-096c32174048}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="lib\core\language\parser">
-      <UniqueIdentifier>{a4394686-e428-4f10-8ae4-c40205d89899}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="lib\core\language\ast">
-      <UniqueIdentifier>{61b835ba-811c-4372-9823-3de2dbecd34f}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="lib\core\language\load">
-      <UniqueIdentifier>{5e6552b1-ebdb-4314-9ce9-b10770751648}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="lib\core\window">
-      <UniqueIdentifier>{ba48dd07-da70-4fce-83f4-299fd1a6cc62}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="lib\core\framework">
-      <UniqueIdentifier>{a82a1254-6ff9-4139-a9f3-e902cd7b0efa}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="lib\core\document">
-      <UniqueIdentifier>{205663ca-ee15-4bd4-a2f3-5ac4334d422f}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="lib\core\nodes">
+    <Filter Include="lib\nodes">
       <UniqueIdentifier>{c9bca3fb-f7da-4582-b031-34e9d2fc98eb}</UniqueIdentifier>
     </Filter>
-    <Filter Include="lib\core\nodes\graph">
+    <Filter Include="lib\nodes\graph">
       <UniqueIdentifier>{b6cfe4b5-2a08-4e6d-b58c-faa95ea11e7c}</UniqueIdentifier>
     </Filter>
-    <Filter Include="lib\core\nodes\image">
+    <Filter Include="lib\nodes\image">
       <UniqueIdentifier>{841ed894-d29a-4943-9dca-ae69375618bf}</UniqueIdentifier>
     </Filter>
-    <Filter Include="lib\core\nodes\text node">
+    <Filter Include="lib\nodes\text node">
       <UniqueIdentifier>{042f426d-8751-4da4-9b8e-1911dd0bfd18}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lib\document">
+      <UniqueIdentifier>{205663ca-ee15-4bd4-a2f3-5ac4334d422f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lib\language">
+      <UniqueIdentifier>{c5ad18c5-e0f1-4f60-9311-096c32174048}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lib\language\parser">
+      <UniqueIdentifier>{a4394686-e428-4f10-8ae4-c40205d89899}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lib\language\ast">
+      <UniqueIdentifier>{61b835ba-811c-4372-9823-3de2dbecd34f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lib\language\load">
+      <UniqueIdentifier>{5e6552b1-ebdb-4314-9ce9-b10770751648}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lib\primatives">
+      <UniqueIdentifier>{e4e43b06-b9f2-424a-b444-aa4c4d55c3ff}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lib\primatives\gpu">
+      <UniqueIdentifier>{b1ba17ee-f9da-400b-bc07-7cf23fbb52b4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lib\primatives\window">
+      <UniqueIdentifier>{ba48dd07-da70-4fce-83f4-299fd1a6cc62}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="gpu.cpp">
-      <Filter>lib\core\gpu</Filter>
+      <Filter>lib\primatives\gpu</Filter>
     </ClCompile>
     <ClCompile Include="iwindow.cpp">
-      <Filter>lib\core\window</Filter>
+      <Filter>lib\primatives\window</Filter>
     </ClCompile>
     <ClCompile Include="itextnode.cpp">
-      <Filter>lib\core\nodes\text node</Filter>
+      <Filter>lib\nodes\text node</Filter>
     </ClCompile>
     <ClCompile Include="igraphnode.cpp">
-      <Filter>lib\core\nodes\graph</Filter>
+      <Filter>lib\nodes\graph</Filter>
     </ClCompile>
     <ClCompile Include="iimagenode.cpp">
-      <Filter>lib\core\nodes\image</Filter>
+      <Filter>lib\nodes\image</Filter>
     </ClCompile>
     <ClCompile Include="main.cpp">
       <Filter>src</Filter>
@@ -72,38 +69,38 @@
     <ClCompile Include="lintel.cpp">
       <Filter>lib\api</Filter>
     </ClCompile>
-    <ClCompile Include="framework.cpp">
-      <Filter>lib\core\framework</Filter>
-    </ClCompile>
     <ClCompile Include="lexer.cpp">
-      <Filter>lib\core\language\parser</Filter>
+      <Filter>lib\language\parser</Filter>
     </ClCompile>
     <ClCompile Include="parser.cpp">
-      <Filter>lib\core\language\parser</Filter>
+      <Filter>lib\language\parser</Filter>
     </ClCompile>
     <ClCompile Include="parser.h">
-      <Filter>lib\core\language\parser</Filter>
+      <Filter>lib\language\parser</Filter>
     </ClCompile>
     <ClCompile Include="ast.cpp">
-      <Filter>lib\core\language\ast</Filter>
+      <Filter>lib\language\ast</Filter>
     </ClCompile>
     <ClCompile Include="load.cpp">
-      <Filter>lib\core\language\load</Filter>
+      <Filter>lib\language\load</Filter>
     </ClCompile>
     <ClCompile Include="visitor.cpp">
-      <Filter>lib\core\language\load</Filter>
+      <Filter>lib\language\load</Filter>
     </ClCompile>
     <ClCompile Include="stylesheet.cpp">
       <Filter>lib\api</Filter>
     </ClCompile>
     <ClCompile Include="canvas.cpp">
-      <Filter>lib\core\gpu</Filter>
+      <Filter>lib\primatives\gpu</Filter>
     </ClCompile>
     <ClCompile Include="core.cpp">
-      <Filter>lib\core\document</Filter>
+      <Filter>lib\document</Filter>
     </ClCompile>
     <ClCompile Include="inode.cpp">
-      <Filter>lib\core\nodes</Filter>
+      <Filter>lib\document</Filter>
+    </ClCompile>
+    <ClCompile Include="registry.cpp">
+      <Filter>lib\api</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -111,55 +108,46 @@
       <Filter>lib\api</Filter>
     </ClInclude>
     <ClInclude Include="gpu.h">
-      <Filter>lib\core\gpu</Filter>
+      <Filter>lib\primatives\gpu</Filter>
     </ClInclude>
     <ClInclude Include="iwindow.h">
-      <Filter>lib\core\window</Filter>
+      <Filter>lib\primatives\window</Filter>
     </ClInclude>
     <ClInclude Include="itextnode.h">
-      <Filter>lib\core\nodes\text node</Filter>
+      <Filter>lib\nodes\text node</Filter>
     </ClInclude>
     <ClInclude Include="igraphnode.h">
-      <Filter>lib\core\nodes\graph</Filter>
+      <Filter>lib\nodes\graph</Filter>
     </ClInclude>
     <ClInclude Include="iimagenode.h">
-      <Filter>lib\core\nodes\image</Filter>
+      <Filter>lib\nodes\image</Filter>
     </ClInclude>
     <ClInclude Include="lintel.h">
       <Filter>lib\api</Filter>
     </ClInclude>
-    <ClInclude Include="types.h">
-      <Filter>lib\api</Filter>
-    </ClInclude>
-    <ClInclude Include="framework.h">
-      <Filter>lib\core\framework</Filter>
-    </ClInclude>
     <ClInclude Include="lexer.h">
-      <Filter>lib\core\language\parser</Filter>
+      <Filter>lib\language\parser</Filter>
     </ClInclude>
     <ClInclude Include="ast.h">
-      <Filter>lib\core\language\ast</Filter>
+      <Filter>lib\language\ast</Filter>
     </ClInclude>
     <ClInclude Include="visitor.h">
-      <Filter>lib\core\language\load</Filter>
+      <Filter>lib\language\load</Filter>
     </ClInclude>
     <ClInclude Include="include.h">
       <Filter>lib</Filter>
     </ClInclude>
     <ClInclude Include="canvas.h">
-      <Filter>lib\core\gpu</Filter>
+      <Filter>lib\primatives\gpu</Filter>
     </ClInclude>
     <ClInclude Include="core.h">
-      <Filter>lib\core\document</Filter>
+      <Filter>lib\document</Filter>
     </ClInclude>
     <ClInclude Include="inode.h">
-      <Filter>lib\core\nodes</Filter>
+      <Filter>lib\document</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="ui.ltl">
-      <Filter>src</Filter>
-    </None>
     <None Include="language.md">
       <Filter>src</Filter>
     </None>

@@ -3,7 +3,6 @@
 #include "visitor.h"
 #include "parser.h"
 #include "inode.h"
-#include "framework.h"
 
 #include <charconv>
 #include <cwctype>
@@ -19,10 +18,10 @@ namespace lintel::parser {
 // ─── Node registrations ───────────────────────────────────────────────────────
 
 static bool s_registered = ([] {
-    FRAMEWORK.register_node<lintel::Node>("node");
-    FRAMEWORK.register_node<lintel::TextNode>("text");
-    FRAMEWORK.register_node<lintel::GraphNode>("graph");
-    FRAMEWORK.register_node<lintel::ImageNode>("image");
+    register_node<lintel::Node>("node");
+    register_node<lintel::TextNode>("text");
+    register_node<lintel::GraphNode>("graph");
+    register_node<lintel::ImageNode>("image");
     return true;
 })();
 
@@ -31,7 +30,7 @@ static bool s_registered = ([] {
 // Converts a parser AST expression node into a concrete PropValue.
 // IdentExpr nodes that match a VarDecl in the resolver are followed one level.
 
-static PropValue node_to_prop(const Node* node, const StyleResolver& res) {
+static Property node_to_prop(const Node* node, const StyleResolver& res) {
     if (!node) return std::wstring{};
 
     switch (node->kind) {
@@ -49,7 +48,7 @@ static PropValue node_to_prop(const Node* node, const StyleResolver& res) {
             const std::string& name = node->as<IdentExpr>().name;
             if (const Node* target = res.var(name))
                 return node_to_prop(target, res);
-            return std::wstring(name.begin(), name.end());
+            return to_wstring(name);
         }
 
         case NodeKind::ListExpr:
@@ -85,29 +84,28 @@ struct InheritedProps {
     std::optional<float>        opacity;
 };
 
-static InheritedProps derive_inherited(const lintel::Node& n,
-                                       const InheritedProps& parent) {
+static InheritedProps derive_inherited(const lintel::Node& n, const InheritedProps& parent) {
     InheritedProps out = parent;
-    const Attributes& a = const_cast<lintel::Node&>(n).attr();
-    if (const auto* v = a.get<std::wstring>(property::FontFamily)) out.font_family = *v;
-    if (const auto* v = a.get<float>(property::FontSize))          out.font_size = *v;
-    if (const auto* v = a.get<Color>(property::TextColor))         out.text_color = *v;
-    if (const auto* v = a.get<bool>(property::Bold))               out.bold = *v;
-    if (const auto* v = a.get<bool>(property::Italic))             out.italic = *v;
-    if (const auto* v = a.get<bool>(property::Wrap))               out.wrap = *v;
-    if (const auto* v = a.get<float>(property::Opacity))           out.opacity = *v;
+    Properties& a = const_cast<lintel::Node&>(n).properties();
+    if (Property* v = a.find(Key::FontFamily, Property::Type::WString)) out.font_family = v->get_wstring();
+    if (Property* v = a.find(Key::FontSize)) out.font_size = *v;
+    if (Property* v = a.find(Key::TextColor)) out.text_color = v->get_color();
+    if (Property* v = a.find(Key::Bold)) out.bold = *v;
+    if (Property* v = a.find(Key::Italic)) out.italic = *v;
+    if (Property* v = a.find(Key::Wrap)) out.wrap = *v;
+    if (Property* v = a.find(Key::Opacity)) out.opacity = *v;
     return out;
 }
 
 static void apply_inherited(lintel::Node& n, const InheritedProps& inh) {
-    Attributes& a = n.attr();
-    if (inh.font_family && !a.has(property::FontFamily)) a.set(property::FontFamily, *inh.font_family);
-    if (inh.font_size && !a.has(property::FontSize))   a.set(property::FontSize, *inh.font_size);
-    if (inh.text_color && !a.has(property::TextColor))  a.set(property::TextColor, *inh.text_color);
-    if (inh.bold && !a.has(property::Bold))        a.set(property::Bold, *inh.bold);
-    if (inh.italic && !a.has(property::Italic))      a.set(property::Italic, *inh.italic);
-    if (inh.wrap && !a.has(property::Wrap))        a.set(property::Wrap, *inh.wrap);
-    if (inh.opacity && !a.has(property::Opacity))     a.set(property::Opacity, *inh.opacity);
+    Properties& a = n.properties();
+    if (inh.font_family && !a.has(Key::FontFamily)) a.set(Key::FontFamily, *inh.font_family);
+    if (inh.font_size && !a.has(Key::FontSize)) a.set(Key::FontSize, *inh.font_size);
+    if (inh.text_color && !a.has(Key::TextColor)) a.set(Key::TextColor, *inh.text_color);
+    if (inh.bold && !a.has(Key::Bold)) a.set(Key::Bold, *inh.bold);
+    if (inh.italic && !a.has(Key::Italic)) a.set(Key::Italic, *inh.italic);
+    if (inh.wrap && !a.has(Key::Wrap)) a.set(Key::Wrap, *inh.wrap);
+    if (inh.opacity && !a.has(Key::Opacity)) a.set(Key::Opacity, *inh.opacity);
 }
 
 // ─── AST → StyleSheet (pass 2) ────────────────────────────────────────────────
@@ -147,7 +145,7 @@ static StyleSheet build_stylesheet(const AST& ast, const StyleResolver& res) {
             }
             else if (child->kind == NodeKind::OnDecl) {
                 const OnDecl& od = child->as<OnDecl>();
-                Event ev = FRAMEWORK.get_event(od.event);
+                Event ev = get_event(od.event);
                 if (ev == Event::Null) {
                     std::cerr << "load: unknown event '" << od.event
                         << "' in style '" << sd.name << "' - skipped\n";
@@ -187,7 +185,7 @@ class TreeBuilder {
     void build(lintel::Node& parent, const NodeDecl& decl,
                const InheritedProps& inherited) {
 
-        lintel::Node node = FRAMEWORK.create_node(decl.tag);
+        lintel::Node node = create_node(decl.tag);
         if (!node) {
             std::cerr << "load: unknown node type '" << decl.tag << "' - skipped\n";
             return;
@@ -208,8 +206,7 @@ class TreeBuilder {
             if (!child || child->kind != NodeKind::PropDecl) continue;
             const PropDecl& pd = child->as<PropDecl>();
             StyleSheet::dispatch_prop(n, pd.property,
-                                      node_to_prop(pd.value, res_),
-                                      StyleSheet::Mode::Snap);
+                                      node_to_prop(pd.value, res_));
         }
 
         // 4. Node-local event handlers.
@@ -217,22 +214,21 @@ class TreeBuilder {
             if (!child || child->kind != NodeKind::OnDecl) continue;
             const OnDecl& od = child->as<OnDecl>();
 
-            Event ev = FRAMEWORK.get_event(od.event);
+            Event ev = get_event(od.event);
             if (ev == Event::Null) {
                 std::cerr << "load: unknown event '" << od.event << "' - skipped\n";
                 continue;
             }
 
-            // Resolve delta props eagerly so the lambda is AST-independent.
-            auto deltas = std::make_shared<std::vector<StyleSheet::Prop>>();
+            auto props = std::make_shared<std::vector<StyleSheet::Prop>>();
             for (Node* dp : od.props) {
                 if (!dp || dp->kind != NodeKind::PropDecl) continue;
                 const PropDecl& pd = dp->as<PropDecl>();
-                deltas->push_back({ pd.property, node_to_prop(pd.value, res_) });
+                props->push_back({ pd.property, node_to_prop(pd.value, res_) });
             }
 
-            n.on(ev, [deltas] (WeakNode self) {
-                StyleSheet::animate(self.as(), *deltas);
+            n.on(ev, [props] (WeakNode self) {
+                StyleSheet::apply_props(self.as(), *props);
             });
         }
 
@@ -267,8 +263,7 @@ public:
                     if (!child || child->kind != NodeKind::PropDecl) continue;
                     const PropDecl& pd = child->as<PropDecl>();
                     StyleSheet::dispatch_prop(root, pd.property,
-                                              node_to_prop(pd.value, res_),
-                                              StyleSheet::Mode::Snap);
+                                              node_to_prop(pd.value, res_));
                 }
                 for (Node* child : decl.props) {
                     if (!child || child->kind != NodeKind::NodeDecl) continue;

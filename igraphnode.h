@@ -8,61 +8,24 @@
 namespace lintel {
 
 // ---------------------------------------------------------------------------
-// DataSeries
-// ---------------------------------------------------------------------------
-//
-// One set of (x, y) sample pairs drawn as a connected polyline on a GraphNode.
-// color and weight are per-series and override any global line-color / line-weight
-// attributes set on the node itself.
-//
-struct DataSeries {
-    std::wstring       name;
-    std::vector<float> xs;
-    std::vector<float> ys;
-    Color              color = Color(0.30f, 0.70f, 1.00f, 1.f); // electric blue
-    float              weight = 2.f;
-};
-
-// ---------------------------------------------------------------------------
 // IGraphNode
 // ---------------------------------------------------------------------------
-//
-// Internal implementation of GraphNode.  Renders a two-axis chart with:
-//
-//   - Axis-aligned grid lines at "nice" tick positions (rounded values).
-//   - A brighter zero-line when zero is within the visible range.
-//   - Right-aligned Y-axis labels to the left of the plot area.
-//   - Centered X-axis labels below the plot area.
-//   - One or more data series drawn as anti-aliased polylines with round joins.
-//
-// Visual style is intentionally minimal / dark-mode:
-//   - Grid lines are very faint (override via attribs::grid_color).
-//   - Axis labels are muted blue-gray (override via attribs::label_color).
-//   - No axis-box border - the grid lines define the extent.
-//
-// Axis ranges default to auto (derived from data bounding box).  Manual ranges
-// are set through GraphNode::x_range() / y_range().
-//
-// Drawing contract
-// ----------------
-// All rendering goes through the Canvas& parameter on draw() and the private
-// draw_* helpers; this node never calls GPU or D2D APIs directly.
-//
+
 class IGraphNode : public INode {
 public:
     std::vector<DataSeries> series;
 
-    // Manual axis ranges - NaN means "auto-compute from data each frame".
-    float range_x_min = nan_f();
-    float range_x_max = nan_f();
-    float range_y_min = nan_f();
-    float range_y_max = nan_f();
+    // Manual axis ranges
+    UIValue range_x_min;
+    UIValue range_x_max;
+    UIValue range_y_min;
+    UIValue range_y_max;
 
     // Pixel insets reserving space for axis labels around the plot area.
     // Increase plot_left if Y-axis labels are being clipped.
-    float plot_left = 56.f;
-    float plot_right = 18.f;
-    float plot_top = 16.f;
+    float plot_left   = 56.f;
+    float plot_right  = 18.f;
+    float plot_top    = 16.f;
     float plot_bottom = 40.f;
 
     void draw(Node& self, Canvas& canvas) override;

@@ -1,5 +1,4 @@
 #include "iimagenode.h"
-#include "framework.h"
 
 namespace lintel {
 
@@ -17,26 +16,31 @@ void IImageNode::ensure_bitmap() {
 // ---------------------------------------------------------------------------
 
 void IImageNode::measure(float avail_w, float avail_h) {
-    // Early exit (same as every other node)
-    if (!attr.layout_dirty &&
-        avail_w == cached_avail_w_ &&
-        avail_h == cached_avail_h_)
-        return;
+    if (can_skip_measure(avail_w, avail_h)) return;
 
     ensure_bitmap();
 
-    // Base auto logic (we override for intrinsic size)
-    rect.w = is_auto(layout_width()) ? 0.f : layout_width();
-    rect.h = is_auto(layout_height()) ? 0.f : layout_height();
+    // Resolve rect.w / rect.h from layout_width/height and available space,
+    // exactly as the base does — pixels, percent, or auto-fills available space.
+    // For image nodes, auto is then overridden below with the intrinsic bitmap
+    // size if a bitmap is loaded; otherwise the node collapses to zero.
+    measure_self_size(avail_w, avail_h);
 
     if (bitmap_) {
         const D2D1_SIZE_F sz = bitmap_->GetSize();
-        const Edges pad = layout_padding();
+        const Edges       pad = layout_padding();
 
-        if (is_auto(layout_width()))
-            rect.w = sz.width + pad.horizontal();
-        if (is_auto(layout_height()))
-            rect.h = sz.height + pad.vertical();
+        // Auto axes adopt the bitmap's intrinsic size (+ padding).
+        // Fixed axes (pixels/percent) were already resolved by measure_self_size
+        // and are left untouched — the image will stretch to fill them in draw().
+        if (layout_width().is_auto())  rect.w = sz.width + pad.horizontal();
+        if (layout_height().is_auto()) rect.h = sz.height + pad.vertical();
+    }
+    else {
+        // No bitmap yet: collapse auto axes to zero so the node doesn't
+        // claim space it can't fill.
+        if (layout_width().is_auto())  rect.w = 0.f;
+        if (layout_height().is_auto()) rect.h = 0.f;
     }
 
     rect.w = std::max(0.f, rect.w);
@@ -44,7 +48,7 @@ void IImageNode::measure(float avail_w, float avail_h) {
 
     cached_avail_w_ = avail_w;
     cached_avail_h_ = avail_h;
-    attr.layout_dirty = false;
+    props.make_clean();
 }
 
 void IImageNode::arrange(float slot_x, float slot_y) {
@@ -52,13 +56,14 @@ void IImageNode::arrange(float slot_x, float slot_y) {
     rect.x = slot_x + margin.left;
     rect.y = slot_y + margin.top;
 }
-
-void IImageNode::apply_callback(Property p) {
-    if (p == FRAMEWORK.get_property("path")) {
-        if (auto i = attr.get<std::wstring>(p)) {
-            image_path_ = narrow(*i);
-            invalidate_bitmap();
-            attr.layout_dirty = true;
+void IImageNode::apply_callback(Key key) {
+    if (key == get_key("path")) {
+        if (Property* prop = props.find(key)) {
+            if (prop->is_wstring()) {
+                image_path_ = to_string(prop->get_wstring());
+                invalidate_bitmap();
+                props.make_dirty();
+            }
         }
     }
 }
@@ -68,7 +73,7 @@ void IImageNode::apply_callback(Property p) {
 // ---------------------------------------------------------------------------
 
 void IImageNode::draw(Node& /*self*/, Canvas& canvas) {
-    draw_default(canvas);                 // background + border (if any)
+    draw_default(canvas); // background + border (if any)
 
     ensure_bitmap();
     if (!bitmap_) return;
@@ -83,14 +88,14 @@ void IImageNode::draw(Node& /*self*/, Canvas& canvas) {
 
 ImageNode::ImageNode(): Node(nullptr) {
     impl_allocate<IImageNode>();
-    handle<IImageNode>()->attr.set(property::Share, 0.f); // shrink-wrap by default
+    handle<IImageNode>()->props.set(Key::Share, 0.f); // shrink-wrap by default
 }
 
 ImageNode::ImageNode(std::string_view path): Node(nullptr) {
     impl_allocate<IImageNode>();
     IImageNode& n = *handle<IImageNode>();
     n.image_path_ = path;
-    n.attr.set(property::Share, 0.f);
+    n.props.set(Key::Share, 0.f);
 }
 
 ImageNode& ImageNode::source(std::string_view path) {
@@ -98,7 +103,7 @@ ImageNode& ImageNode::source(std::string_view path) {
     if (n.image_path_ != path) {
         n.image_path_ = std::string(path);
         n.invalidate_bitmap();
-        n.attr.layout_dirty = true;   // force re-measure (size may change)
+        n.props.make_dirty();
     }
     return *this;
 }

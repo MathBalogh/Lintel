@@ -29,7 +29,7 @@ public:
     void measure(float avail_w, float avail_h) override;
     void arrange(float slot_x, float slot_y)   override;
 
-    void apply_callback(Property p) override;
+    void apply_callback(Key key) override;
 
     void draw(Node& handle, Canvas& canvas)    override;
 };

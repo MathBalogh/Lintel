@@ -1,4 +1,4 @@
-#pragma once  // was missing
+#pragma once
 #include "ast.h"
 #include <deque>
 #include <vector>

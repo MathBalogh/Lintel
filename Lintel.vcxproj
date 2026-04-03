@@ -40,13 +40,13 @@
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
@@ -130,7 +130,6 @@
     <ClCompile Include="ast.cpp" />
     <ClCompile Include="canvas.cpp" />
     <ClCompile Include="core.cpp" />
-    <ClCompile Include="framework.cpp" />
     <ClCompile Include="gpu.cpp" />
     <ClCompile Include="igraphnode.cpp" />
     <ClCompile Include="iimagenode.cpp" />
@@ -143,6 +142,7 @@
     <ClCompile Include="load.cpp" />
     <ClCompile Include="parser.cpp" />
     <ClCompile Include="parser.h" />
+    <ClCompile Include="registry.cpp" />
     <ClCompile Include="stylesheet.cpp" />
     <ClCompile Include="visitor.cpp" />
   </ItemGroup>
@@ -150,7 +150,6 @@
     <ClInclude Include="ast.h" />
     <ClInclude Include="canvas.h" />
     <ClInclude Include="core.h" />
-    <ClInclude Include="framework.h" />
     <ClInclude Include="gpu.h" />
     <ClInclude Include="handle.h" />
     <ClInclude Include="igraphnode.h" />
@@ -161,13 +160,11 @@
     <ClInclude Include="iwindow.h" />
     <ClInclude Include="lexer.h" />
     <ClInclude Include="lintel.h" />
-    <ClInclude Include="types.h" />
     <ClInclude Include="visitor.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="language.md" />
     <None Include="test.ltl" />
-    <None Include="ui.ltl" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="image.jpg" />

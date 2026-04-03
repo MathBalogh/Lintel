@@ -69,8 +69,8 @@ public:
     bool         scrollbar_enabled = false;   // property::Scrollbar
 
     /* -- content & editing state -------------------------------------------- */
-    std::wstring content;               // UTF-16 text displayed by this node.
-    size_t       caret_pos = 0; // Active end of the selection (0 … size).
+    std::wstring content;
+    size_t       caret_pos = 0;
     size_t       selection_anchor = 0; // Fixed end of the selection.
     bool         has_focus = false;
     bool         lmb_selecting = false; // True while LMB is held for drag-select.
@@ -123,7 +123,7 @@ public:
      */
     void sync_style();
 
-    void apply_callback(Property p) override;
+    void apply_callback(Key key) override;
 
     /* -- layout ------------------------------------------------------------- */
     void measure(float avail_w, float avail_h) override;

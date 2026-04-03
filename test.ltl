@@ -1,9 +1,5 @@
 root:
-	node "messages":
-		share = 1
-	text "content":
-		height = 100
-		border-weight = 1
-		border-color = #FF0000
-		editable = true
+	background-color = #FF00FF
+	node "test":
+		background-color = #00FF00
 		

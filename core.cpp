@@ -82,8 +82,8 @@ void Document::resize_now() {
     win->rebuild_ui_texture(new_w, new_h);
 
     if (INode* r = root.handle<INode>()) {
-        r->attr.set(property::Width, static_cast<float>(new_w));
-        r->attr.set(property::Height, static_cast<float>(new_h));
+        r->props.set(Key::Width, static_cast<float>(new_w));
+        r->props.set(Key::Height, static_cast<float>(new_h));
     }
 }
 
@@ -537,13 +537,9 @@ void Document::process_default() {
     // 1. Layout (outside the lock — pure CPU work, no D2D/D3D calls)
     // -----------------------------------------------------------------------
 
-    if (INode* r = root.handle<INode>())
-        r->tick_tweens(ui_tick_dts);
-
-    if (INode* r = root.handle<INode>())
-        r->layout(0.f, 0.f,
-                  static_cast<float>(win->ui_width),
-                  static_cast<float>(win->ui_height));
+    if (INode* r = root.handle<INode>()) {
+        r->layout(0.f, 0.f, static_cast<float>(win->ui_width), static_cast<float>(win->ui_height));
+    }
 
     // -----------------------------------------------------------------------
     // 2. Draw + Blit (locked against resize_now on the message thread)
@@ -590,7 +586,7 @@ void Document::process_default() {
     win->swapchain->Present(1, 0);
 }
 
-std::string narrow(const std::wstring& w) {
+std::string to_string(const std::wstring& w) {
     if (w.empty()) return {};
     #ifdef _WIN32
     int n = WideCharToMultiByte(CP_UTF8, 0, w.data(), static_cast<int>(w.size()),
@@ -601,6 +597,29 @@ std::string narrow(const std::wstring& w) {
     return out;
     #else
     return std::string(w.begin(), w.end()); // ASCII fallback
+    #endif
+}
+std::wstring to_wstring(const std::string& s) {
+    if (s.empty()) return {};
+
+    #ifdef _WIN32
+    // Convert UTF‑8 → UTF‑16 using Win32 API
+    int n = MultiByteToWideChar(CP_UTF8, 0,
+                                s.data(), static_cast<int>(s.size()),
+                                nullptr, 0);
+    std::wstring out(n, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0,
+                        s.data(), static_cast<int>(s.size()),
+                        out.data(), n);
+    return out;
+    #else
+    // ASCII fallback: widen each byte
+    std::wstring out;
+    out.reserve(s.size());
+    for (unsigned char c : s) {
+        out.push_back(static_cast<wchar_t>(c));
+    }
+    return out;
     #endif
 }
 

@@ -1,7 +1,336 @@
 #pragma once
 
 #include "handle.h"
-#include "types.h"
+
+#include <string>
+#include <any>
+#include <functional>
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+namespace lintel {
+
+struct Color {
+    float r, g, b, a;
+
+    Color() noexcept;
+    Color(float c);
+    Color(float red, float green, float blue, float alpha = 1.0f) noexcept;
+
+    static Color rgb(float r, float g, float b, float a = 1.0f) noexcept;
+    static Color hsl(float h, float s, float l, float a = 1.0f) noexcept;
+    static Color hsv(float h, float s, float v, float a = 1.0f) noexcept;
+    static Color hex(uint32_t rgba);
+
+    void clamp() noexcept;
+
+    static Color black() noexcept { return { 0.f, 0.f, 0.f, 1.f }; }
+    static Color white() noexcept { return { 1.f, 1.f, 1.f, 1.f }; }
+    static Color lighten(const Color& o, float f) noexcept;
+};
+
+enum class UIUnit {
+    Auto,
+    Pixels,
+    Percent
+};
+struct UIValue {
+    UIUnit unit = UIUnit::Auto;
+    float value = 0.0f;
+
+    static UIValue make_auto() { return { UIUnit::Auto, 0.f }; }
+    static UIValue px(float px) { return { UIUnit::Pixels, px }; }
+    static UIValue pct(float pct) { return { UIUnit::Percent, pct }; }
+
+    bool is_auto() const {
+        return unit == UIUnit::Auto;
+    }
+    bool is_pixels() const {
+        return unit == UIUnit::Pixels;
+    }
+    bool is_percent() const {
+        return unit == UIUnit::Percent;
+    }
+};
+UIValue operator"" _px(unsigned long long v);
+UIValue operator"" _pct(unsigned long long v);
+
+struct Key {
+    using key_t = unsigned int;
+
+    enum : key_t {
+        Null,
+        __hot_floats_begin,
+        BorderWeight,
+        BorderRadius,
+        __hot_floats_end,
+        // Layout affecting properties
+        __hot_layout_begin,
+        Width,
+        Height,
+        PaddingTop,
+        PaddingRight,
+        PaddingBottom,
+        PaddingLeft,
+        MarginTop,
+        MarginRight,
+        MarginBottom,
+        MarginLeft,
+        Gap,
+        Share,
+        Direction,
+        AlignItems,
+        JustifyItems,
+        __hot_layout_end,
+        __hot_colors_begin,
+        BackgroundColor,
+        BorderColor,
+        TextColor,
+        __hot_colors_end,
+        __cold_properties_begin,
+        FontSize,
+        FontFamily,
+        Bold,
+        Italic,
+        Wrap,
+        TextAlign,
+        Editable,
+        VerticalCenter,
+        Scrollbar,
+        GridColor,
+        GridWeight,
+        LabelColor,
+        LabelFontSize,
+        Opacity,
+        __cold_properties_end
+    };
+
+    key_t index;
+
+    Key(): index(Null) {}
+    Key(key_t idx): index(idx) {}
+
+    bool affects_layout() const noexcept { return within(__hot_layout_begin, __hot_layout_end); }
+    bool is_hot_float()   const noexcept { return within(__hot_floats_begin, __hot_floats_end); }
+    bool is_hot_color()   const noexcept { return within(__hot_colors_begin, __hot_colors_end); }
+
+    key_t hot_float_index() const noexcept { return index - __hot_floats_begin - 1; }
+    key_t hot_color_index() const noexcept { return index - __hot_colors_begin - 1; }
+
+    bool operator == (Key other) const noexcept { return index == other.index; }
+private:
+    // non-inclusive
+    bool within(key_t begin, key_t end) const { return index > begin && index < end; }
+};
+
+} // namespace lintel
+
+namespace std {
+template<>
+struct hash<lintel::Key> {
+    size_t operator()(const lintel::Key& k) const noexcept {
+        return std::hash<unsigned int>{}(k.index);
+    }
+};
+} // namespace std
+
+namespace lintel {
+class Property {
+public:
+    enum class Type {
+        Null,
+        Bool,
+        Float,
+        Enum,
+        UIValue,
+        Color,
+        WString
+    };
+
+    Property() = default;
+    ~Property();
+
+    Property(bool p);
+    Property(float p);
+    Property(unsigned int p);
+    Property(const UIValue& p);
+    Property(const Color& p);
+    Property(const std::wstring& str);
+
+    Property(const Property& other);
+    Property& operator=(const Property& other);
+
+    Property(Property&& other) noexcept;
+    Property& operator=(Property&& other) noexcept;
+
+    Type type() const noexcept;
+
+    bool is_null() const noexcept;
+    bool is_bool() const noexcept;
+    bool is_float() const noexcept;
+    bool is_enum() const noexcept;
+    bool is_ui() const noexcept;
+    bool is_color() const noexcept;
+    bool is_wstring() const noexcept;
+
+    bool         get_bool()  const noexcept;
+    float        get_float() const noexcept;
+    float& get_float();
+    unsigned int get_enum()  const noexcept;
+    Color        get_color() const noexcept;
+    Color& get_color();
+    UIValue      get_ui()    const noexcept;
+
+    const std::wstring& get_wstring() const noexcept;
+
+    bool operator==(const std::wstring&) const;
+
+    operator bool()   const noexcept;
+    operator float()  const noexcept;
+    operator Color()  const noexcept;
+    operator UIValue() const noexcept;
+
+private:
+    // Compute max size safely
+    static constexpr size_t DATA_SIZE =
+        std::max({ sizeof(bool), sizeof(float), sizeof(unsigned int),
+                   sizeof(UIValue), sizeof(Color), sizeof(std::wstring) });
+
+    static constexpr size_t DATA_ALIGN =
+        std::max({ alignof(bool), alignof(float), alignof(unsigned int),
+                   alignof(UIValue), alignof(Color), alignof(std::wstring) });
+
+    using Storage = std::aligned_storage_t<DATA_SIZE, DATA_ALIGN>;
+    Storage data_;
+
+    Type type_ = Type::Null;
+
+    void destroy();
+    void copy_from(const Property& other);
+    void move_from(Property&& other) noexcept;
+
+    template<typename T>
+    T* ptr() {
+        return reinterpret_cast<T*>(&data_);
+    }
+
+    template<typename T>
+    const T* ptr() const {
+        return reinterpret_cast<const T*>(&data_);
+    }
+};
+class Properties {
+    static constexpr unsigned int HOT_FLOATS_COUNT =
+        Key::__hot_floats_end - Key::__hot_floats_begin - 1;
+
+    static constexpr unsigned int HOT_COLORS_COUNT =
+        Key::__hot_colors_end - Key::__hot_colors_begin - 1;
+
+    float hot_floats_[HOT_FLOATS_COUNT]{ 0 };
+    uint32_t hot_floats_mask_ = 0;
+    bool has_hot_float(unsigned int rel) const;
+
+    Color hot_colors_[HOT_COLORS_COUNT]{ 0 };
+    uint32_t hot_colors_mask_ = 0;
+    bool has_hot_color(unsigned int rel) const;
+
+    std::unordered_map<Key, Property> cold_;
+
+    bool layout_dirty_ = true;
+public:
+    bool is_dirty() const;
+    bool is_clean() const;
+    void make_dirty();
+    void make_clean();
+
+    Properties& set(Key key, Property value);
+    Properties& clear(Key key);
+    bool has(Key key) const noexcept;
+
+    float* get_float(Key key);
+    Color* get_color(Key key);
+
+    Property* find(Key key);
+    Property* find(Key key, Property::Type type);
+
+    Property get(Key key) const;
+    Property get_or(Key key, Property::Type type, Property or_) const;
+};
+
+struct Rect {
+    float x, y, w, h;
+
+    Rect(float w_ = 0.f, float h_ = 0.f) noexcept;
+    Rect(float x_, float y_, float w_, float h_) noexcept;
+};
+struct Edges {
+    float top, right, bottom, left;
+
+    Edges() noexcept;
+    Edges(float all) noexcept;
+    Edges(float x_axis, float y_axis) noexcept;
+    Edges(float top_, float right_, float bottom_, float left_) noexcept
+        : top(top_), right(right_), bottom(bottom_), left(left_) {}
+
+    float horizontal() const; // left + right
+    float vertical()   const; // top  + bottom
+};
+
+enum class Direction {
+    Row,
+    Column
+};
+enum class Align {
+    Start,
+    Center,
+    End,
+    Stretch
+};
+enum class Justify {
+    Start,
+    Center,
+    End,
+    SpaceBetween,
+    SpaceAround
+};
+
+enum class TextAlign {
+    Left,
+    Center,
+    Right,
+    Justify
+};
+
+enum class MouseButton {
+    None,
+    Left,
+    Right,
+    Middle
+};
+enum class Event {
+    Null,
+    MouseEnter, MouseLeave, MouseMove,
+    MouseDown, MouseUp,
+    Click, DoubleClick, RightClick,
+    Scroll,
+    Focus, Blur,
+    KeyDown, KeyUp, Char,
+    DragStart, Drag, DragEnd,
+    Any
+};
+struct Modifiers {
+    bool shift = false;
+    bool ctrl = false;
+    bool alt = false;
+};
+
+} // namespace std
+
+// ---------------------------------------------------------------------------
+// Nodes
+// ---------------------------------------------------------------------------
 
 namespace lintel {
 
@@ -22,8 +351,11 @@ public:
 
     // -- Style -----------------------------------------------------------
 
-    Attributes& attr();
-    Node& attr(const Attributes& s);
+    Properties& properties();
+    Node& padding(const Edges&);
+    Node& margin(const Edges&);
+    Node& width(UIValue);
+    Node& height(UIValue);
 
     // -- Tree ------------------------------------------------------------
 
@@ -32,53 +364,16 @@ public:
     Node  remove(Node& child);
     Node* child(size_t index);
 
-    // -- Layout ----------------------------------------------------------
+    // Destroy all children.  Equivalent to repeatedly calling remove() but
+    // O(n) rather than O(n²) and flushes every child's CORE weak-refs.
+    Node& clear_children();
 
-    Node& share(float s = 1.f);
-    Node& width(float w);
-    Node& height(float h);
-    Node& padding(Edges e);
-    Node& margin(Edges e);
-    Node& row();
-    Node& column();
-    Node& align(Align a);
-    Node& justify(Justify j);
-    Node& gap(float g);
+    void dirty();
 
     // -- Behaviour -------------------------------------------------------
 
     Node& focusable(bool f = true);
     Node& draggable(bool d = true);
-
-    // -- Tree (extended) -------------------------------------------------
-
-    // Destroy all children.  Equivalent to repeatedly calling remove() but
-    // O(n) rather than O(n²) and flushes every child's CORE weak-refs.
-    Node& clear_children();
-
-    // -- Animation -------------------------------------------------------
-    //
-    // transition() installs a per-property spec so that subsequent animate()
-    // calls without explicit timing use it.  Mirrors the .lintel `transition`
-    // declaration; both paths write to the same INode::transitions_ map.
-    //
-    // animate(p, target)
-    //   If a transition spec exists for p, starts (or restarts from the
-    //   current live value) a tween towards target.  Otherwise snaps.
-    //   Use this when the animation parameters are declared at authoring time.
-    //
-    // animate(p, target, duration, easing)
-    //   Always creates a tween with the supplied timing, ignoring any installed
-    //   spec.  Use this when the parameters are computed at call time.
-
-    Node& transition(Property p, float duration, Easing easing = Easing::EaseOut);
-
-    Node& animate(Property p, float  target);
-    Node& animate(Property p, Color  target);
-    Node& animate(Property p, float  target, float duration, Easing easing = Easing::EaseOut);
-    Node& animate(Property p, Color  target, float duration, Easing easing = Easing::EaseOut);
-
-    void dirty();
 
     // -- Events ----------------------------------------------------------
 
@@ -100,9 +395,9 @@ using WeakNode = WeakImpl<Node>;
 class TextNode : public Node {
 public:
     TextNode();
-    explicit TextNode(std::wstring_view content);
+    explicit TextNode(const std::wstring& content);
 
-    TextNode& content(std::wstring_view c);
+    TextNode& content(const std::wstring& c);
     TextNode& clear_content();
     std::wstring& content();
 
@@ -119,18 +414,30 @@ public:
 // GraphNode
 // ---------------------------------------------------------------------------
 
+struct DataSeries {
+    std::wstring name;
+    std::vector<float> xs;
+    std::vector<float> ys;
+    Color color = Color(1.0f, 0.8f, 0.2f);
+    float weight = 1.0f;
+
+    void push(float x, float y) {
+        xs.push_back(x);
+        ys.push_back(y);
+    }
+
+    void clear() {
+        xs.clear();
+        ys.clear();
+    }
+};
 class GraphNode : public Node {
 public:
     GraphNode();
 
-    GraphNode& push_series(
-        std::wstring_view  name,
-        std::vector<float> xs,
-        std::vector<float> ys,
-        Color              color = Color(0.30f, 0.70f, 1.00f, 1.f),
-        float              weight = 2.f);
+    DataSeries& get_series(size_t index);
+    DataSeries& create_series();
 
-    GraphNode& clear_series();
     GraphNode& x_range(float lo, float hi);
     GraphNode& y_range(float lo, float hi);
 };
@@ -175,23 +482,8 @@ public:
 };
 
 // ---------------------------------------------------------------------------
-// LoadResult
+// StyleSheet
 // ---------------------------------------------------------------------------
-//
-// Returned by load().  The root node contains the full scene sub-tree;
-// the stylesheet holds all named styles from the file so they can be applied
-// to dynamically created nodes after load() returns.
-//
-// Typical usage:
-//
-//     auto [subtree, sheet] = load("ui.lt");
-//     CORE.root.push(std::move(subtree));
-//
-//     // Dynamically create a node that inherits the file's styles:
-//     auto& btn = someParent.push();
-//     sheet.apply(btn, "button");
-
-
 class StyleSheet {
 public:
     // ── Types ─────────────────────────────────────────────────────────────
@@ -199,7 +491,7 @@ public:
     // A single resolved key/value pair, independent of the AST.
     struct Prop {
         std::string key;
-        PropValue   value;
+        Property  value;
     };
 
     // A set of Prop deltas that fire when an event occurs on a node to which
@@ -222,13 +514,10 @@ public:
     //
 
     // Define or replace a named style.
-    StyleSheet& define(std::string name, std::vector<Prop> props,
-                       std::vector<Handler> handlers = {});
+    StyleSheet& define(std::string name, std::vector<Prop> props, std::vector<Handler> handlers = {});
 
     // Append event handlers to an existing (or new) style.
-    StyleSheet& define_handler(const std::string& name,
-                               Event              event,
-                               std::vector<Prop>  deltas);
+    StyleSheet& define_handler(const std::string& name, Event event, std::vector<Prop> deltas);
 
     // ── Query ─────────────────────────────────────────────────────────────
 
@@ -237,30 +526,12 @@ public:
 
     // ── Application ───────────────────────────────────────────────────────
 
-    // Apply all props of a named style to n (snap, no animation).
+    // Apply all props of a named style to n
     // Wire all of that style's event handlers onto n.
     // No-op if the style does not exist.
     void apply(Node& n, std::string_view style_name) const;
 
-    // Apply a list of props as animated deltas (used by event handlers).
-    // Routes each prop through INode::animate_prop so active transitions fire.
-    static void animate(Node& n, const std::vector<Prop>& deltas);
-
-    // ── Single-prop dispatch ───────────────────────────────────────────────
-    //
-    // Translates a string key + PropValue into the appropriate Node mutation.
-    // Handles shorthands (padding, margin), enum coercions (direction, align,
-    // justify, text-align), transition installation, focusable/draggable
-    // flags, and falls back to Attributes::set() via INode::apply() for all
-    // registered framework properties.
-    //
-    // Both apply() and animate() delegate to this method, passing a different
-    // application mode.
-    //
-
-    enum class Mode { Snap, Animate };
-
-    static void dispatch_prop(Node& n, std::string_view key, const PropValue& val, Mode mode = Mode::Snap);
+    static void dispatch_prop(Node& n, std::string_view key, const Property& val);
 
     // ── Query ───────────────────────────────────────────────────────
 
@@ -273,18 +544,16 @@ public:
         return WeakImpl<T>(nullptr);
     }
 
+    // Apply props to n using the given mode.
+    static void apply_props(Node& n, const std::vector<Prop>& props);
 private:
     std::unordered_map<std::string, WeakNode> named_;
     std::unordered_map<std::string, Style> styles_;
-
-    // Apply props to n using the given mode.
-    static void apply_props(Node& n, const std::vector<Prop>& props, Mode mode);
 
     // Register event handlers on n so that each handler fires animate() on
     // its delta list when the event occurs.
     static void wire_handlers(Node& n, const std::vector<Handler>& handlers);
 };
-
 struct LoadResult {
     Node        root;
     StyleSheet  sheet;
@@ -293,11 +562,36 @@ struct LoadResult {
 };
 
 // ---------------------------------------------------------------------------
-// Query
+// Free Functions
 // ---------------------------------------------------------------------------
 
 // Returns a LoadResult.  The caller owns both the scene sub-tree and the
 // StyleSheet.
-LoadResult  load(const char* path_to_file);
+LoadResult load(const char* path_to_file);
+
+// Convert a wstring to a standard string
+std::string to_string(const std::wstring& w);
+std::wstring to_wstring(const std::string& s);
+
+} // namespace lintel
+
+// ---------------------------------------------------------------------------
+// Registry
+// ---------------------------------------------------------------------------
+
+namespace lintel {
+
+Event get_event(const std::string& name);
+
+Key register_key(const std::string& name);
+Key get_key(const std::string& name);
+
+void register_node(const std::string& name, Node(*factory)());
+template<typename T> void register_node(const std::string& name) {
+    register_node(name, [] () -> Node {
+        return T();
+    });
+}
+Node create_node(const std::string& name);
 
 } // namespace lintel

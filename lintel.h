@@ -11,6 +11,8 @@
 
 namespace lintel {
 
+using enum_t = unsigned int;
+
 struct Rect {
     float x, y, w, h;
 
@@ -30,29 +32,28 @@ struct Edges {
     float vertical()   const; // top  + bottom
 };
 
-enum class Direction {
-    Row,
-    Column
+enum Direction : enum_t {
+    DirectionRow,
+    DirectionCol
 };
-enum class Align {
-    Start,
-    Center,
-    End,
-    Stretch
+enum Align : enum_t {
+    AlignStart,
+    AlignCenter,
+    AlignEnd,
+    AlignStretch
 };
-enum class Justify {
-    Start,
-    Center,
-    End,
-    SpaceBetween,
-    SpaceAround
+enum Justify : enum_t {
+    JustifyStart,
+    JustifyCenter,
+    JustifyEnd,
+    JustifySpaceBetween,
+    JustifySpaceAround
 };
-
-enum class TextAlign {
-    Left,
-    Center,
-    Right,
-    Justify
+enum TextAlign : enum_t {
+    TextAlignLeft,
+    TextAlignCenter,
+    TextAlignRight,
+    TextAlignJustify
 };
 
 enum class MouseButton {
@@ -126,50 +127,51 @@ UIValue operator"" _pct(unsigned long long v);
 struct Key {
     using key_t = unsigned int;
 
+    // When updating keys, update registry.cpp/Registry()/property_names_
     enum : key_t {
         Null,
         __hot_floats_begin,
-        BorderWeight,
-        BorderRadius,
+            BorderWeight,
+            BorderRadius,
         __hot_floats_end,
-        // Layout affecting properties
-        __hot_layout_begin,
-        Width,
-        Height,
-        PaddingTop,
-        PaddingRight,
-        PaddingBottom,
-        PaddingLeft,
-        MarginTop,
-        MarginRight,
-        MarginBottom,
-        MarginLeft,
-        Gap,
-        Share,
-        Direction,
-        AlignItems,
-        JustifyItems,
+        __hot_layout_begin, // Layout affecting properties
+            Width,
+            Height,
+            PaddingTop,
+            PaddingRight,
+            PaddingBottom,
+            PaddingLeft,
+            MarginTop,
+            MarginRight,
+            MarginBottom,
+            MarginLeft,
+            Gap,
+            Share,
+            Direction,
+            AlignItems,
+            JustifyItems,
+            Display,
         __hot_layout_end,
         __hot_colors_begin,
-        BackgroundColor,
-        BorderColor,
-        TextColor,
+            BackgroundColor,
+            BorderColor,
+            TextColor,
         __hot_colors_end,
         __cold_properties_begin,
-        FontSize,
-        FontFamily,
-        Bold,
-        Italic,
-        Wrap,
-        TextAlign,
-        Editable,
-        VerticalCenter,
-        Scrollbar,
-        GridColor,
-        GridWeight,
-        LabelColor,
-        LabelFontSize,
-        Opacity,
+            FontSize,
+            FontFamily,
+            Bold,
+            Italic,
+            Wrap,
+            TextAlign,
+            Editable,
+            VerticalCenter,
+            Scrollbar,
+            GridColor,
+            GridWeight,
+            LabelColor,
+            LabelFontSize,
+            Opacity,
         __cold_properties_end
     };
 
@@ -342,6 +344,28 @@ public:
 namespace lintel {
 
 // ---------------------------------------------------------------------------
+// Structures
+// ---------------------------------------------------------------------------
+
+struct DataSeries {
+    std::wstring name;
+    std::vector<float> xs;
+    std::vector<float> ys;
+    Color color = Color(1.0f, 0.8f, 0.2f);
+    float weight = 1.0f;
+
+    void push(float x, float y) {
+        xs.push_back(x);
+        ys.push_back(y);
+    }
+
+    void clear() {
+        xs.clear();
+        ys.clear();
+    }
+};
+
+// ---------------------------------------------------------------------------
 // Node
 // ---------------------------------------------------------------------------
 
@@ -364,6 +388,8 @@ public:
     Node& margin(const Edges&);
     Node& width(UIValue);
     Node& height(UIValue);
+
+    Node& display(bool);
 
     // -- Tree ------------------------------------------------------------
 
@@ -396,10 +422,6 @@ public:
 };
 using WeakNode = WeakImpl<Node>;
 
-// ---------------------------------------------------------------------------
-// TextNode
-// ---------------------------------------------------------------------------
-
 class TextNode : public Node {
 public:
     TextNode();
@@ -419,28 +441,6 @@ public:
 
     TextNode& on(Event event, std::function<void(TextNode&)> callback);
 };
-
-// ---------------------------------------------------------------------------
-// GraphNode
-// ---------------------------------------------------------------------------
-
-struct DataSeries {
-    std::wstring name;
-    std::vector<float> xs;
-    std::vector<float> ys;
-    Color color = Color(1.0f, 0.8f, 0.2f);
-    float weight = 1.0f;
-
-    void push(float x, float y) {
-        xs.push_back(x);
-        ys.push_back(y);
-    }
-
-    void clear() {
-        xs.clear();
-        ys.clear();
-    }
-};
 class GraphNode : public Node {
 public:
     GraphNode();
@@ -451,11 +451,6 @@ public:
     GraphNode& x_range(float lo, float hi);
     GraphNode& y_range(float lo, float hi);
 };
-
-// ---------------------------------------------------------------------------
-// ImageNode
-// ---------------------------------------------------------------------------
-
 class ImageNode : public Node {
 public:
     ImageNode();

@@ -40,13 +40,13 @@
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
@@ -138,7 +138,7 @@
     <ClCompile Include="iwindow.cpp" />
     <ClCompile Include="lexer.cpp" />
     <ClCompile Include="lintel.cpp" />
-    <ClCompile Include="LICENSE.txt" />
+    <Text Include="LICENSE.txt" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="load.cpp" />
     <ClCompile Include="parser.cpp" />
@@ -164,7 +164,6 @@
     <ClInclude Include="visitor.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="CONTRIBUTING.md" />
     <None Include="language.md" />
     <None Include="README.md" />
     <None Include="test.ltl" />

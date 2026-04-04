@@ -58,7 +58,7 @@ public:
     std::wstring font_family = L"Segoe UI";
     float        font_size = 14.f;
     Color        text_color = Color(1.f, 1.f, 1.f, 1.f);
-    TextAlign    text_align_val = TextAlign::Left;
+    TextAlign    text_align_val = TextAlign::TextAlignLeft;
     bool         bold = false;
     bool         italic_val = false;
     bool         wrap = true;

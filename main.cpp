@@ -12,7 +12,8 @@ int main() {
 
     if (auto n = sheet.find<TextNode>("text")) {
         n->set(Key::Editable, true)
-          .set(Key::TextColor, Color(0, 0, 0));
+            .set(Key::TextColor, Color(0, 0, 0))
+            .set(Key::TextAlign, TextAlignCenter);
     }
 
     return win.run();

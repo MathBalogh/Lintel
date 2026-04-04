@@ -54,6 +54,7 @@ public:
             { "direction", Key::Direction },
             { "align-items", Key::AlignItems },
             { "justify-items", Key::JustifyItems },
+            { "display", Key::Display },
             { "bold", Key::Bold },
             { "italic", Key::Italic },
             { "wrap", Key::Wrap },
@@ -91,7 +92,6 @@ public:
         if (auto it = node_factories_.find(name); it != node_factories_.end()) return it->second();
         return Node(nullptr);
     }
-
 };
 
 } // namespace

@@ -62,27 +62,27 @@ static lintel::Property try_parse_enum(std::string_view prop_key, const std::str
     if (k.index == lintel::Key::Null) return {};
 
     if (k == lintel::Key::Direction) {
-        if (value_name == "row")    return lintel::Property(static_cast<unsigned int>(lintel::Direction::Row));
-        if (value_name == "column") return lintel::Property(static_cast<unsigned int>(lintel::Direction::Column));
+        if (value_name == "row")    return lintel::Property(static_cast<unsigned int>(lintel::Direction::DirectionRow));
+        if (value_name == "column") return lintel::Property(static_cast<unsigned int>(lintel::Direction::DirectionCol));
     }
     else if (k == lintel::Key::AlignItems) {
-        if (value_name == "start")   return lintel::Property(static_cast<unsigned int>(lintel::Align::Start));
-        if (value_name == "center")  return lintel::Property(static_cast<unsigned int>(lintel::Align::Center));
-        if (value_name == "end")     return lintel::Property(static_cast<unsigned int>(lintel::Align::End));
-        if (value_name == "stretch") return lintel::Property(static_cast<unsigned int>(lintel::Align::Stretch));
+        if (value_name == "start")   return lintel::Property(static_cast<unsigned int>(lintel::Align::AlignStart));
+        if (value_name == "center")  return lintel::Property(static_cast<unsigned int>(lintel::Align::AlignCenter));
+        if (value_name == "end")     return lintel::Property(static_cast<unsigned int>(lintel::Align::AlignEnd));
+        if (value_name == "stretch") return lintel::Property(static_cast<unsigned int>(lintel::Align::AlignStretch));
     }
     else if (k == lintel::Key::JustifyItems) {
-        if (value_name == "start")          return lintel::Property(static_cast<unsigned int>(lintel::Justify::Start));
-        if (value_name == "center")         return lintel::Property(static_cast<unsigned int>(lintel::Justify::Center));
-        if (value_name == "end")            return lintel::Property(static_cast<unsigned int>(lintel::Justify::End));
-        if (value_name == "space-between")  return lintel::Property(static_cast<unsigned int>(lintel::Justify::SpaceBetween));
-        if (value_name == "space-around")   return lintel::Property(static_cast<unsigned int>(lintel::Justify::SpaceAround));
+        if (value_name == "start")          return lintel::Property(static_cast<unsigned int>(lintel::Justify::JustifyStart));
+        if (value_name == "center")         return lintel::Property(static_cast<unsigned int>(lintel::Justify::JustifyCenter));
+        if (value_name == "end")            return lintel::Property(static_cast<unsigned int>(lintel::Justify::JustifyEnd));
+        if (value_name == "space-between")  return lintel::Property(static_cast<unsigned int>(lintel::Justify::JustifySpaceBetween));
+        if (value_name == "space-around")   return lintel::Property(static_cast<unsigned int>(lintel::Justify::JustifySpaceAround));
     }
     else if (k == lintel::Key::TextAlign) {
-        if (value_name == "left")     return lintel::Property(static_cast<unsigned int>(lintel::TextAlign::Left));
-        if (value_name == "center")   return lintel::Property(static_cast<unsigned int>(lintel::TextAlign::Center));
-        if (value_name == "right")    return lintel::Property(static_cast<unsigned int>(lintel::TextAlign::Right));
-        if (value_name == "justify")  return lintel::Property(static_cast<unsigned int>(lintel::TextAlign::Justify));
+        if (value_name == "left")     return lintel::Property(static_cast<unsigned int>(lintel::TextAlign::TextAlignLeft));
+        if (value_name == "center")   return lintel::Property(static_cast<unsigned int>(lintel::TextAlign::TextAlignCenter));
+        if (value_name == "right")    return lintel::Property(static_cast<unsigned int>(lintel::TextAlign::TextAlignRight));
+        if (value_name == "justify")  return lintel::Property(static_cast<unsigned int>(lintel::TextAlign::TextAlignJustify));
     }
 
     return {};

@@ -13,9 +13,9 @@ namespace lintel {
 
 static DWRITE_TEXT_ALIGNMENT dwrite_alignment(TextAlign a) {
     switch (a) {
-        case TextAlign::Center:  return DWRITE_TEXT_ALIGNMENT_CENTER;
-        case TextAlign::Right:   return DWRITE_TEXT_ALIGNMENT_TRAILING;
-        case TextAlign::Justify: return DWRITE_TEXT_ALIGNMENT_JUSTIFIED;
+        case TextAlign::TextAlignCenter:  return DWRITE_TEXT_ALIGNMENT_CENTER;
+        case TextAlign::TextAlignRight:   return DWRITE_TEXT_ALIGNMENT_TRAILING;
+        case TextAlign::TextAlignJustify: return DWRITE_TEXT_ALIGNMENT_JUSTIFIED;
         default:                 return DWRITE_TEXT_ALIGNMENT_LEADING;
     }
 }

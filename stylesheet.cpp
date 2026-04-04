@@ -120,43 +120,43 @@ void StyleSheet::dispatch_prop(Node& n, std::string_view key, const Property& va
     // ── Enum-valued properties (still stored as float) ───────────────────────
 
     if (key == "direction") {
-        unsigned int fval = (unsigned int) Direction::Column;
+        Direction num = DirectionCol;
         if (val.is_wstring()) {
-            fval = (val.get_wstring() == L"row")
-                ? (unsigned int) Direction::Row
-                : (unsigned int) Direction::Column;
+            num = (val.get_wstring() == L"row")
+                ? DirectionRow
+                : DirectionCol;
         }
         else if (val.is_enum()) {
-            fval = val.get_enum();
+            num = (Direction) val.get_enum();
         }
-        impl->apply(Key::Direction, fval);
+        impl->apply(Key::Direction, num);
         return;
     }
 
     if (key == "align") {
-        unsigned int fval = (unsigned int) Align::Stretch;
+        Align num = AlignStretch;
         if (val.is_wstring()) {
-            Align a = Align::Stretch;
-            if (val.get_wstring() == L"start") a = Align::Start;
-            else if (val.get_wstring() == L"center") a = Align::Center;
-            else if (val.get_wstring() == L"end") a = Align::End;
-            fval = (unsigned int) a;
+            Align a = AlignStretch;
+            if (val.get_wstring() == L"start") a = AlignStart;
+            else if (val.get_wstring() == L"center") a = AlignCenter;
+            else if (val.get_wstring() == L"end") a = AlignEnd;
+            num = a;
         }
         else if (val.is_enum()) {
-            fval = val.get_enum();
+            num = (Align) val.get_enum();
         }
-        impl->apply(Key::AlignItems, fval);
+        impl->apply(Key::AlignItems, num);
         return;
     }
 
     if (key == "justify") {
-        unsigned int fval = (unsigned int) Justify::Start;
+        unsigned int fval = (unsigned int) Justify::JustifyStart;
         if (val.is_wstring()) {
-            Justify j = Justify::Start;
-            if (val == L"center") j = Justify::Center;
-            else if (val == L"end") j = Justify::End;
-            else if (val == L"space-between") j = Justify::SpaceBetween;
-            else if (val == L"space-around") j = Justify::SpaceAround;
+            Justify j = Justify::JustifyStart;
+            if (val == L"center") j = Justify::JustifyCenter;
+            else if (val == L"end") j = Justify::JustifyEnd;
+            else if (val == L"space-between") j = Justify::JustifySpaceBetween;
+            else if (val == L"space-around") j = Justify::JustifySpaceAround;
             fval = (unsigned int) j;
         }
         else if (val.is_enum()) {
@@ -167,12 +167,12 @@ void StyleSheet::dispatch_prop(Node& n, std::string_view key, const Property& va
     }
 
     if (key == "text-align") {
-        unsigned int fval = (unsigned int) TextAlign::Left;
+        unsigned int fval = (unsigned int) TextAlign::TextAlignLeft;
         if (val.is_wstring()) {
-            TextAlign ta = TextAlign::Left;
-            if (val == L"center") ta = TextAlign::Center;
-            else if (val == L"right") ta = TextAlign::Right;
-            else if (val == L"justify") ta = TextAlign::Justify;
+            TextAlign ta = TextAlign::TextAlignLeft;
+            if (val == L"center") ta = TextAlign::TextAlignCenter;
+            else if (val == L"right") ta = TextAlign::TextAlignRight;
+            else if (val == L"justify") ta = TextAlign::TextAlignJustify;
             fval = (unsigned int) ta;
         }
         else if (val.is_enum()) {

@@ -94,8 +94,30 @@ public:
     bool draggable_flag = false;
     bool mouse_inside = false;
 
+    // Returns true when this node participates in layout, drawing, and input.
+    bool is_displayed() const { return props.has(Key::Display) ? (bool) props.get(Key::Display) : true; }
+
+    // Lightweight filtered view over children: only nodes where is_displayed().
+    // Used by layout, draw, and input traversals so hidden-child skips are
+    // expressed once here rather than scattered across every loop.
+    //
+    // Returns a small vector of non-owning INode* pointers.  Allocation is
+    // avoided for the common all-visible case via the overload that accepts a
+    // pre-allocated buffer, but the simple form is fine for callers that already
+    // allocate per-frame.
+    std::vector<INode*> visible_children();
+
     // Mark layout_dirty as true for all ancestors of this node
     void propagate_dirty();
+
+    // Hides or shows this node (CSS display:none semantics).
+    // A hidden node is excluded from measure/arrange, draw, hit-testing,
+    // hover tracking, and focus collection.  Propagates dirty upward so
+    // the parent reflows on the next frame.
+    void set_display(bool visible) {
+        props.set(Key::Display, visible);
+        propagate_dirty();
+    }
 
     // -- Layout cache -----------------------------------------------------
 

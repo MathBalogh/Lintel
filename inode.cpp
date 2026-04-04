@@ -42,17 +42,17 @@ Edges INode::layout_margin() const {
 Direction INode::layout_direction() const {
     if (auto p = props.get(Key::Direction); p.is_enum())
         return Direction(p.get_enum());
-    return Direction::Column;
+    return DirectionCol;
 }
 Align INode::layout_align() const {
     if (auto p = props.get(Key::AlignItems); p.is_enum())
         return Align(p.get_enum());
-    return Align::Stretch;
+    return AlignStretch;
 }
 Justify INode::layout_justify() const {
     if (auto p = props.get(Key::JustifyItems); p.is_enum())
         return Justify(p.get_enum());
-    return Justify::Start;
+    return JustifyStart;
 }
 
 float INode::inner_w()   const { return std::max(0.f, rect.w - layout_padding().horizontal()); }
@@ -65,6 +65,7 @@ float INode::content_y() const { return rect.y + layout_padding().top; }
 // ===========================================================================
 
 Node* INode::find_hit(Node& self, float sx, float sy) {
+    if (!is_displayed()) return nullptr;
     if (sx < rect.x || sx > rect.x + rect.w ||
         sy < rect.y || sy > rect.y + rect.h)
         return nullptr;
@@ -76,6 +77,16 @@ Node* INode::find_hit(Node& self, float sx, float sy) {
     return &self;
 }
 void INode::update_hover(WeakNode self, float sx, float sy) {
+    if (!is_displayed()) {
+        // Ensure we clear stale hover state if this node was hidden mid-hover.
+        if (mouse_inside && doc_) {
+            mouse_inside = false;
+            fire_with_context(*doc_, this, self, Event::MouseLeave,
+                              sx - content_x(), sy - content_y(),
+                              MouseButton::None, doc_->input.modifiers, 0.f, 0.f);
+        }
+        return;
+    }
     const bool now_inside = (sx >= rect.x && sx <= rect.x + rect.w &&
                              sy >= rect.y && sy <= rect.y + rect.h);
 
@@ -127,7 +138,7 @@ void INode::bubble_up(Event type) {
 // ===========================================================================
 
 /*static*/ void INode::collect_focusable(INode* node, std::vector<INode*>& out) {
-    if (!node) return;
+    if (!node || !node->is_displayed()) return;
     if (node->focusable_flag) out.push_back(node);
     for (Node& child : node->children)
         collect_focusable(child.handle<INode>(), out);
@@ -184,12 +195,14 @@ void INode::measure_self_size(float avail_w, float avail_h) {
 // ---------------------------------------------------------------------------
 
 void INode::measure_children() {
-    const bool  is_col = (layout_direction() == Direction::Column);
+    const bool  is_col = (layout_direction() == DirectionCol);
     const float cross_avail = is_col ? inner_w() : inner_h();
     const float main_avail = is_col ? inner_h() : inner_w();
 
     for (Node& child : children) {
         INode* ci = child.handle<INode>();
+        if (!ci->is_displayed()) continue;
+
         const UIValue child_main = is_col ? ci->layout_height() : ci->layout_width();
         // Percent is resolvable from the parent's inner size just like pixels.
         const bool known_main = child_main.is_pixels() || child_main.is_percent();
@@ -208,7 +221,7 @@ void INode::measure_children() {
 // ---------------------------------------------------------------------------
 
 void INode::compute_auto_main(float avail_w, float avail_h) {
-    const bool    is_col = (layout_direction() == Direction::Column);
+    const bool    is_col = (layout_direction() == DirectionCol );
     const UIValue parent_main = is_col ? layout_height() : layout_width();
 
     if (!parent_main.is_auto()) return;
@@ -219,13 +232,16 @@ void INode::compute_auto_main(float avail_w, float avail_h) {
     if (avail_main > 0.f) return;
 
     const Edges padding = layout_padding();
-    const int   n = static_cast<int>(children.size());
     const float gap_val = layout_gap();
+
+    // Count only visible children so gap math matches what arrange_axis sees.
+    const std::vector<INode*> vis = visible_children();
+    const int n = static_cast<int>(vis.size());
+
     float total = (is_col ? padding.vertical() : padding.horizontal())
         + (n > 1 ? gap_val * (n - 1) : 0.f);
 
-    for (Node& child : children) {
-        INode* ci = child.handle<INode>();
+    for (INode* ci : vis) {
         const UIValue child_main = is_col ? ci->layout_height() : ci->layout_width();
         const Edges   cm = ci->layout_margin();
 
@@ -267,7 +283,7 @@ void INode::default_arrange(float slot_x, float slot_y) {
     rect.y = slot_y + margin.top;
 
     if (!children.empty())
-        arrange_axis(AxisLayout{ layout_direction() == Direction::Column });
+        arrange_axis(AxisLayout{ layout_direction() == DirectionCol });
 }
 
 void INode::measure(float avail_w, float avail_h) { default_measure(avail_w, avail_h); }
@@ -328,22 +344,21 @@ float AxisLayout::content_cross(INode* p) const { return is_col ? p->content_x()
 // no side effects.
 // ---------------------------------------------------------------------------
 
-static std::pair<float, float> justify_cursor_and_gap(
-    Justify justify, float free_space, int n) {
+static std::pair<float, float> justify_cursor_and_gap(Justify justify, float free_space, int n) {
     float offset = 0.f;
     float extra_gap = 0.f;
 
     switch (justify) {
-        case Justify::Center:
+        case JustifyCenter:
             offset = free_space * 0.5f;
             break;
-        case Justify::End:
+        case JustifyEnd:
             offset = free_space;
             break;
-        case Justify::SpaceBetween:
+        case JustifySpaceBetween:
             if (n > 1) extra_gap = free_space / static_cast<float>(n - 1);
             break;
-        case Justify::SpaceAround:
+        case JustifySpaceAround:
             extra_gap = free_space / static_cast<float>(n);
             offset = extra_gap * 0.5f;
             break;
@@ -372,19 +387,19 @@ float INode::resolve_cross(AxisLayout ax, INode* ci) {
     const float  isize = ax.inner_cross(this);
     const float  avail = isize - cross_m;
 
-    if (layout_align() == Align::Stretch && ax.child_cross(ci).is_auto())
+    if (layout_align() == AlignStretch && ax.child_cross(ci).is_auto())
         ax.child_cross_rect(ci) = std::max(0.f, avail);
 
     const float  csize = ax.child_cross_rect(ci);
     const float  origin = ax.content_cross(this);
 
     switch (layout_align()) {
-        case Align::Center:
+        case AlignCenter:
             return origin + (avail - csize) * 0.5f;
-        case Align::End:
+        case AlignEnd:
             // Inset from the far edge by the far-side margin.
             return origin + isize - (is_col(ax) ? margin.right : margin.bottom) - csize;
-        case Align::Stretch:
+        case AlignStretch:
             return origin;
         default: // Start
             return origin;
@@ -393,16 +408,18 @@ float INode::resolve_cross(AxisLayout ax, INode* ci) {
 
 void INode::arrange_axis(AxisLayout ax) {
     const float im = ax.inner_main(this);
-    const int   n = static_cast<int>(children.size());
     const float gap_val = layout_gap();
+
+    // Exclude hidden children from all layout math.
+    const std::vector<INode*> vis = visible_children();
+    const int n = static_cast<int>(vis.size());
 
     // ----- First pass: measure fixed space and accumulate shares ----------
 
     float fixed_main = gap_val * std::max(0, n - 1);
     float total_shares = 0.f;
 
-    for (Node& child : children) {
-        INode* ci = child.handle<INode>();
+    for (INode* ci : vis) {
         const UIValue mv = ax.child_main(ci);
         const float   mm = ax.child_main_margin(ci);
 
@@ -422,8 +439,7 @@ void INode::arrange_axis(AxisLayout ax) {
 
     if (total_shares > 0.f) {
         // Shares path: distribute the pool proportionally, no justify.
-        for (Node& child : children) {
-            INode* ci = child.handle<INode>();
+        for (INode* ci : vis) {
             const UIValue mv = ax.child_main(ci);
             const float   mm = ax.child_main_margin(ci);
 
@@ -448,8 +464,7 @@ void INode::arrange_axis(AxisLayout ax) {
             justify_cursor_and_gap(layout_justify(), free_space, n);
         cursor += offset;
 
-        for (Node& child : children) {
-            INode* ci = child.handle<INode>();
+        for (INode* ci : vis) {
             const UIValue mv = ax.child_main(ci);
             const float   mm = ax.child_main_margin(ci);
 
@@ -471,6 +486,7 @@ void INode::arrange_axis(AxisLayout ax) {
 // ===========================================================================
 
 void INode::draw(Node& self, Canvas& canvas) {
+    if (!is_displayed()) return;
     draw_default(canvas);
     for (Node& child : children)
         child.handle<INode>()->draw(child, canvas);
@@ -609,6 +625,7 @@ Node& Node::height(UIValue v) {
 
 Node& Node::focusable(bool f) { iptr_->focusable_flag = f; return *this; }
 Node& Node::draggable(bool d) { iptr_->draggable_flag = d; return *this; }
+Node& Node::display(bool visible) { iptr_->set_display(visible); return *this; }
 
 // ===========================================================================
 // Node — children
@@ -648,6 +665,24 @@ float Node::mouse_y() const { return iptr_->rect.y - iptr_->doc_->input.mouse_sc
 // ===========================================================================
 // propagate_dirty
 // ===========================================================================
+
+
+// Used by layout, draw, and input traversals so hidden-child skips are
+// expressed once here rather than scattered across every loop.
+//
+// Returns a small vector of non-owning INode* pointers.  Allocation is
+// avoided for the common all-visible case via the overload that accepts a
+// pre-allocated buffer, but the simple form is fine for callers that already
+// allocate per-frame.
+std::vector<INode*> INode::visible_children() {
+    std::vector<INode*> out;
+    out.reserve(children.size());
+    for (Node& child : children) {
+        INode* ci = child.handle<INode>();
+        if (ci && ci->is_displayed()) out.push_back(ci);
+    }
+    return out;
+}
 
 void INode::propagate_dirty() {
     WeakNode node = WeakNode(this);

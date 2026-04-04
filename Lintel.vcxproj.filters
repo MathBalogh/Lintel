@@ -102,9 +102,6 @@
     <ClCompile Include="visitor.cpp">
       <Filter>lib\language\ast</Filter>
     </ClCompile>
-    <ClCompile Include="LICENSE.txt">
-      <Filter>github</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="handle.h">
@@ -160,13 +157,15 @@
     <None Include="README.md">
       <Filter>github</Filter>
     </None>
-    <None Include="CONTRIBUTING.md">
-      <Filter>github</Filter>
-    </None>
   </ItemGroup>
   <ItemGroup>
     <Image Include="image.jpg">
       <Filter>src</Filter>
     </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="LICENSE.txt">
+      <Filter>github</Filter>
+    </Text>
   </ItemGroup>
 </Project>

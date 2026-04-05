@@ -348,6 +348,7 @@ namespace lintel {
 // ---------------------------------------------------------------------------
 
 struct DataSeries {
+    bool display = true;
     std::wstring name;
     std::vector<float> xs;
     std::vector<float> ys;
@@ -445,8 +446,9 @@ class GraphNode : public Node {
 public:
     GraphNode();
 
-    DataSeries& get_series(size_t index);
-    DataSeries& create_series();
+    void remove_series(const std::string& name);
+    // Create or find
+    DataSeries& series(const std::string& name);
 
     GraphNode& x_range(float lo, float hi);
     GraphNode& y_range(float lo, float hi);

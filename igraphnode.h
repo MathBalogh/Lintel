@@ -4,6 +4,7 @@
 #include <cmath>
 #include <limits>
 #include <vector>
+#include <map>
 
 namespace lintel {
 
@@ -13,7 +14,7 @@ namespace lintel {
 
 class IGraphNode : public INode {
 public:
-    std::vector<DataSeries> series;
+    std::map<std::string, DataSeries> series;
 
     // Manual axis ranges
     UIValue range_x_min;

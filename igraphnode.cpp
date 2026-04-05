@@ -65,7 +65,7 @@ IGraphNode::Bounds IGraphNode::compute_bounds() const {
         float dxl = INF, dxh = -INF;
         float dyl = INF, dyh = -INF;
 
-        for (const DataSeries& s : series) {
+        for (const auto& [k, s] : series) {
             for (float x : s.xs) { dxl = std::min(dxl, x); dxh = std::max(dxh, x); }
             for (float y : s.ys) { dyl = std::min(dyl, y); dyh = std::max(dyh, y); }
         }
@@ -212,8 +212,8 @@ void IGraphNode::draw_series(
     sp.lineJoin = D2D1_LINE_JOIN_ROUND;
     auto stroke = canvas.make_stroke_style(sp);
 
-    for (const DataSeries& s : series) {
-        if (s.xs.empty() || s.ys.empty()) continue;
+    for (const auto& [key, s] : series) {
+        if (s.xs.empty() || s.ys.empty() || !s.display) continue;
         const size_t n = std::min(s.xs.size(), s.ys.size());
 
         if (n == 1) {
@@ -270,11 +270,11 @@ GraphNode::GraphNode(): Node(nullptr) {
     iptr_->props.set(Key::Share, 1.f); // fill parent by default
 }
 
-DataSeries& GraphNode::get_series(size_t i) {
-    return handle<IGraphNode>()->series[i];
+void GraphNode::remove_series(const std::string& name) {
+    handle<IGraphNode>()->series.erase(name);
 }
-DataSeries& GraphNode::create_series() {
-    return handle<IGraphNode>()->series.emplace_back();
+DataSeries& GraphNode::series(const std::string& name) {
+    return handle<IGraphNode>()->series[name];
 }
 
 GraphNode& GraphNode::x_range(float lo, float hi) {

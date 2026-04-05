@@ -131,7 +131,9 @@
     <ClCompile Include="canvas.cpp" />
     <ClCompile Include="document.cpp" />
     <ClCompile Include="gpu.cpp" />
+    <ClCompile Include="icanvasnode.cpp" />
     <ClCompile Include="igraphnode.cpp" />
+    <ClCompile Include="ihistogramnode.cpp" />
     <ClCompile Include="iimagenode.cpp" />
     <ClCompile Include="inode.cpp" />
     <ClCompile Include="itextnode.cpp" />
@@ -153,7 +155,9 @@
     <ClInclude Include="document.h" />
     <ClInclude Include="gpu.h" />
     <ClInclude Include="handle.h" />
+    <ClInclude Include="icanvasnode.h" />
     <ClInclude Include="igraphnode.h" />
+    <ClInclude Include="ihistogramnode.h" />
     <ClInclude Include="iimagenode.h" />
     <ClInclude Include="include.h" />
     <ClInclude Include="inode.h" />
@@ -161,6 +165,7 @@
     <ClInclude Include="iwindow.h" />
     <ClInclude Include="lexer.h" />
     <ClInclude Include="lintel.h" />
+    <ClInclude Include="plot_common.h" />
     <ClInclude Include="visitor.h" />
   </ItemGroup>
   <ItemGroup>

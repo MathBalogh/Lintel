@@ -344,29 +344,6 @@ public:
 namespace lintel {
 
 // ---------------------------------------------------------------------------
-// Structures
-// ---------------------------------------------------------------------------
-
-struct DataSeries {
-    bool display = true;
-    std::wstring name;
-    std::vector<float> xs;
-    std::vector<float> ys;
-    Color color = Color(1.0f, 0.8f, 0.2f);
-    float weight = 1.0f;
-
-    void push(float x, float y) {
-        xs.push_back(x);
-        ys.push_back(y);
-    }
-
-    void clear() {
-        xs.clear();
-        ys.clear();
-    }
-};
-
-// ---------------------------------------------------------------------------
 // Node
 // ---------------------------------------------------------------------------
 
@@ -423,6 +400,22 @@ public:
 };
 using WeakNode = WeakImpl<Node>;
 
+class CanvasNode : public Node {
+public:
+    CanvasNode();
+
+    void fill(Color c);
+    void rect(float x, float y, float w, float h, float r = 0.0f);
+    void ellipse(float cx, float cy, float rx, float ry);
+    void line(float x0, float y0, float x1, float y1, float w = 1.0f);
+};
+class ImageNode : public Node {
+public:
+    ImageNode();
+    explicit ImageNode(std::string_view path);
+    ImageNode& source(std::string_view path);
+};
+
 class TextNode : public Node {
 public:
     TextNode();
@@ -442,6 +435,25 @@ public:
 
     TextNode& on(Event event, std::function<void(TextNode&)> callback);
 };
+
+struct DataSeries {
+    bool display = true;
+    std::wstring name;
+    std::vector<float> xs;
+    std::vector<float> ys;
+    Color color = Color(1.0f, 0.8f, 0.2f);
+    float weight = 1.0f;
+
+    void push(float x, float y) {
+        xs.push_back(x);
+        ys.push_back(y);
+    }
+
+    void clear() {
+        xs.clear();
+        ys.clear();
+    }
+};
 class GraphNode : public Node {
 public:
     GraphNode();
@@ -453,11 +465,16 @@ public:
     GraphNode& x_range(float lo, float hi);
     GraphNode& y_range(float lo, float hi);
 };
-class ImageNode : public Node {
+class HistogramNode : public Node {
 public:
-    ImageNode();
-    explicit ImageNode(std::string_view path);
-    ImageNode& source(std::string_view path);
+    HistogramNode();
+
+    void remove_series(const std::string& name);
+    // Create or find
+    DataSeries& series(const std::string& name);
+
+    HistogramNode& x_range(float lo, float hi);
+    HistogramNode& y_range(float lo, float hi);
 };
 
 // ---------------------------------------------------------------------------

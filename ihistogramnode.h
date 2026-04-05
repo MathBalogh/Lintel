@@ -8,10 +8,10 @@
 namespace lintel {
 
 // ---------------------------------------------------------------------------
-// IGraphNode
+// IHistogramNode
 // ---------------------------------------------------------------------------
 
-class IGraphNode : public INode {
+class IHistogramNode : public INode {
 public:
     std::map<std::string, DataSeries> series;
 
@@ -30,8 +30,12 @@ public:
     void draw(Node& self, Canvas& canvas) override;
 
 private:
-    // Each DataSeries rendered as a smooth anti-aliased polyline, clipped to
-    // the plot rectangle.
+    // Each DataSeries rendered as filled vertical bars (histogram style),
+    // clipped to the plot rectangle. Bars extend from the x-axis (y = 0)
+    // up to the data y-value. xs are treated as bin centers; bar width is
+    // derived from the spacing of the sorted xs (or a fixed fraction of
+    // the x-range when only a single bin is present). Multiple series
+    // are overlaid with per-series colors.
     void draw_series(const PlotBounds& b,
                      float px, float py, float pw, float ph,
                      Canvas& canvas) const;

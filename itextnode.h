@@ -1,4 +1,3 @@
-
 #pragma once
 #include "inode.h"
 
@@ -214,7 +213,7 @@ public:
         else propagate_dirty();
     }
 private:
-    
+
     /* -- word-boundary helpers ---------------------------------------------- */
 
     size_t word_start(size_t pos) const;

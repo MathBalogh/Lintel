@@ -11,9 +11,10 @@ int main() {
     win.root() = std::move(node);
 
     if (auto n = sheet.find<TextNode>("text")) {
-        n->set(Key::Editable, true)
-            .set(Key::TextColor, Color(0, 0, 0))
-            .set(Key::TextAlign, TextAlignCenter);
+        n->on_char([] (wchar_t ch) {
+            if (ch == '\r') return false;
+            return true;
+        });
     }
 
     return win.run();

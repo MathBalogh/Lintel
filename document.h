@@ -143,6 +143,7 @@ public:
     PointerState pointer;
 
     float ui_tick_dts = 0.0f;
+    float program_elapsed_s();
 
     // -- Named-node registry ---------------------------------------------
 

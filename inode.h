@@ -107,7 +107,9 @@ public:
     // allocate per-frame.
     std::vector<INode*> visible_children();
 
-    // Mark layout_dirty as true for all ancestors of this node
+    // Mark self layout as dirty
+    void self_dirty();
+    // Mark layout dirty as true for all ancestors of this node
     void propagate_dirty();
 
     // Hides or shows this node (CSS display:none semantics).

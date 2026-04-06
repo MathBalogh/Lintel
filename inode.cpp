@@ -684,6 +684,9 @@ std::vector<INode*> INode::visible_children() {
     return out;
 }
 
+void INode::self_dirty() {
+    props.make_dirty();
+}
 void INode::propagate_dirty() {
     WeakNode node = WeakNode(this);
     while (node) {

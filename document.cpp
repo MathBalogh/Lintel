@@ -39,6 +39,11 @@ Document::~Document() {
     shutdown();
 }
 
+float Document::program_elapsed_s() {
+    time_point now = steady_clock::now();
+    return std::chrono::duration<float>(now.time_since_epoch()).count();
+}
+
 void Document::start() {
     running_ = true;
 

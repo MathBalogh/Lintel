@@ -1,9 +1,12 @@
 #include "itextnode.h"
-#include <dwrite.h>
-#include <d2d1.h>
+
 #include <cwctype>
 #include <vector>
 #include <algorithm>
+
+#include <iostream>
+
+#define SELF (*handle<ITextNode>())
 
 namespace lintel {
 
@@ -186,14 +189,22 @@ void ITextNode::wire_events(Node& handle) {
             case VK_DELETE: if (editable) on_delete();    break;
 
             case VK_LEFT:
+                caret_blink_s = 0.0f;
                 ctrl ? on_move_word_left(shift) : on_move_left(shift);
                 break;
             case VK_RIGHT:
+                caret_blink_s = 0.0f;
                 ctrl ? on_move_word_right(shift) : on_move_right(shift);
                 break;
 
-            case VK_HOME: on_move_home(shift); break;
-            case VK_END:  on_move_end(shift);  break;
+            case VK_HOME:
+                caret_blink_s = 0.0f;
+                on_move_home(shift);
+                break;
+            case VK_END:
+                caret_blink_s = 0.0f;
+                on_move_end(shift);
+                break;
 
             case 0x41: // Ctrl+A — select all
                 if (ctrl) { selection_anchor = 0; caret_pos = content.size(); }
@@ -250,7 +261,6 @@ ComPtr<IDWriteTextLayout> ITextNode::make_layout(float max_w, float max_h) const
 // ---------------------------------------------------------------------------
 
 void ITextNode::measure(float avail_w, float avail_h) {
-    // Delegate to the base skip guard, which also accounts for active tweens.
     if (can_skip_measure(avail_w, avail_h)) return;
 
     // Resolve rect.w / rect.h from layout_width/height and the available space.
@@ -262,9 +272,14 @@ void ITextNode::measure(float avail_w, float avail_h) {
     ensure_format();
     if (content.empty() || !fmt) {
         content_height_ = 0.f;
-        // Auto height with no content: collapse to padding only.
+        // Auto width/height with no content: fit the content size
+        // (non-wrapped width = padding[+scrollbar space]; height = one-line font_size)
+        // instead of collapsing.
+        if (layout_width().is_auto() && !wrap) {
+            rect.w = layout_padding().horizontal() + (scrollbar_enabled ? scrollbar_width() : 0.f);
+        }
         if (layout_height().is_auto())
-            rect.h = layout_padding().vertical();
+            rect.h = font_size + layout_padding().vertical();
 
         cached_avail_w_ = avail_w;
         cached_avail_h_ = avail_h;
@@ -289,6 +304,8 @@ void ITextNode::measure(float avail_w, float avail_h) {
             rect.w = m.widthIncludingTrailingWhitespace
                 + layout_padding().horizontal()
                 + (scrollbar_enabled ? scrollbar_width() : 0.f);
+
+            std::cout << "width: " << rect.w << '\n';
         }
 
         if (layout_height().is_auto())
@@ -425,7 +442,7 @@ void ITextNode::draw(Node& handle, Canvas& canvas) {
     draw_selection(layout, canvas, scroll_offset_y);
 
     if (!content.empty()) {
-        const Rect text_rect{content_x(), content_y() - scroll_offset_y, text_inner_w(), inner_h() };
+        const Rect text_rect{ content_x(), content_y() - scroll_offset_y, text_inner_w(), inner_h() };
         canvas.draw_text(content, fmt.Get(), text_rect, text_color);
     }
 
@@ -433,30 +450,39 @@ void ITextNode::draw(Node& handle, Canvas& canvas) {
 
     // Caret + scrollbar are drawn outside the text clip.
     if (editable && has_focus) {
-        if (content.empty()) {
-            // Special-case empty text: avoids DWrite's phantom-line quirk.
-            const float cx = content_x();
-            float       cy = content_y();
+        caret_blink_s += Window::get().delta_time();
 
-            // Respect vertical_center when no scrollbar (mirrors paragraph alignment).
-            if (vertical_center && !scrollbar_enabled)
-                cy += (inner_h() - font_size) * 0.5f;
+        static constexpr float time_display = 0.7f;
+        static constexpr float time_hide = 1.5f;
 
-            canvas.draw_line(cx, cy, cx, cy + font_size, text_color, 1.0f);
+        if (caret_blink_s < time_display) {
+            if (content.empty()) {
+                // Special-case empty text: avoids DWrite's phantom-line quirk.
+                const float cx = content_x();
+                float       cy = content_y();
+
+                // Respect vertical_center when no scrollbar (mirrors paragraph alignment).
+                if (vertical_center && !scrollbar_enabled)
+                    cy += (inner_h() - font_size) * 0.5f;
+
+                canvas.draw_line(cx, cy, cx, cy + font_size, text_color, 1.0f);
+            }
+            else if (layout) {
+                float caret_px = 0.f, caret_py = 0.f;
+                DWRITE_HIT_TEST_METRICS hit{};
+                layout->HitTestTextPosition(
+                    static_cast<UINT32>(caret_pos),
+                    /*isTrailingHit=*/FALSE,
+                    &caret_px, &caret_py, &hit);
+
+                const float cx = content_x() + caret_px;
+                const float cy = content_y() + caret_py - scroll_offset_y;
+                const float ch = (hit.height > 0.f) ? hit.height : font_size;
+                canvas.draw_line(cx, cy, cx, cy + ch, text_color, 1.0f);
+            }
         }
-        else if (layout) {
-            float caret_px = 0.f, caret_py = 0.f;
-            DWRITE_HIT_TEST_METRICS hit{};
-            layout->HitTestTextPosition(
-                static_cast<UINT32>(caret_pos),
-                /*isTrailingHit=*/FALSE,
-                &caret_px, &caret_py, &hit);
 
-            const float cx = content_x() + caret_px;
-            const float cy = content_y() + caret_py - scroll_offset_y;
-            const float ch = (hit.height > 0.f) ? hit.height : font_size;
-            canvas.draw_line(cx, cy, cx, cy + ch, text_color, 1.0f);
-        }
+        if (caret_blink_s > time_hide) caret_blink_s = 0.0f;
     }
 
     if (is_scrollbar_visible()) {
@@ -494,7 +520,7 @@ void ITextNode::delete_selection() {
     caret_pos = s;
     selection_anchor = s;
     content_height_ = 0.f;
-    props.make_dirty();
+    text_dirty();
     invalidate_format();
     if (editable && has_focus) ensure_caret_visible();
 }
@@ -567,12 +593,16 @@ void ITextNode::on_move_end(bool extend) { set_caret(content.size(), extend); }
 // ---------------------------------------------------------------------------
 
 void ITextNode::on_input(wchar_t ch) {
+    if (user_on_char) {
+        // The user may choose to decline this input (e.g. '\r')
+        if (user_on_char(ch) == false) return;
+    }
+
     if (std::iswprint(ch) || ch == static_cast<wchar_t>(13)) {
         if (has_selection()) delete_selection();
-        content.insert(
-            content.begin() + static_cast<std::wstring::difference_type>(caret_pos), ch);
+        content.insert(content.begin() + static_cast<std::wstring::difference_type>(caret_pos), ch);
         set_caret(caret_pos + 1, false);
-        props.make_dirty();
+        text_dirty();
         invalidate_format();
     }
 }
@@ -580,19 +610,17 @@ void ITextNode::on_input(wchar_t ch) {
 void ITextNode::on_backspace() {
     if (has_selection()) { delete_selection(); return; }
     if (caret_pos == 0)  return;
-    content.erase(content.begin() +
-                  static_cast<std::wstring::difference_type>(caret_pos - 1));
+    content.erase(content.begin() + static_cast<std::wstring::difference_type>(caret_pos - 1));
     set_caret(caret_pos - 1, false);
-    props.make_dirty();
+    text_dirty();
     invalidate_format();
 }
 
 void ITextNode::on_delete() {
     if (has_selection()) { delete_selection(); return; }
     if (caret_pos >= content.size()) return;
-    content.erase(content.begin() +
-                  static_cast<std::wstring::difference_type>(caret_pos));
-    props.make_dirty();
+    content.erase(content.begin() + static_cast<std::wstring::difference_type>(caret_pos));
+    text_dirty();
     invalidate_format();
 }
 
@@ -677,7 +705,7 @@ TextNode& TextNode::content(const std::wstring& c) {
     n.caret_pos = 0;
     n.content_height_ = 0.f;
     n.scroll_offset_y = 0.f;
-    n.props.make_dirty();
+    n.text_dirty();
     n.invalidate_format();
     return *this;
 }
@@ -692,38 +720,33 @@ std::wstring& TextNode::content() {
 
 TextNode& TextNode::text_align(TextAlign a) {
     // Stored as float (integer cast) — sync_style() casts back to TextAlign.
-    ITextNode& n = *handle<ITextNode>();
-    n.props.set(Key::TextAlign, static_cast<float>(static_cast<int>(a)));
-    n.invalidate_format();
+    SELF.props.set(Key::TextAlign, static_cast<float>(static_cast<int>(a)));
+    SELF.invalidate_format();
     return *this;
 }
 
 TextNode& TextNode::scrollbar(bool enable) {
-    ITextNode& n = *handle<ITextNode>();
-    n.scrollbar_enabled = enable;
-    n.props.set(Key::Scrollbar, enable);
-    n.props.make_dirty(); // width may change (scrollbar_width() added/removed)
+    SELF.scrollbar_enabled = enable;
+    SELF.props.set(Key::Scrollbar, enable);
+    SELF.props.make_dirty(); // width may change (scrollbar_width() added/removed)
     return *this;
 }
 
 TextNode& TextNode::center_vertically(bool center) {
-    ITextNode& n = *handle<ITextNode>();
-    n.vertical_center = center;
-    n.props.set(Key::VerticalCenter, center);
-    n.invalidate_format();
+    SELF.vertical_center = center;
+    SELF.props.set(Key::VerticalCenter, center);
+    SELF.invalidate_format();
     return *this;
 }
 
 TextNode& TextNode::select_all() {
-    ITextNode& n = *handle<ITextNode>();
-    n.selection_anchor = 0;
-    n.caret_pos = n.content.size();
+    SELF.selection_anchor = 0;
+    SELF.caret_pos = SELF.content.size();
     return *this;
 }
 
 TextNode& TextNode::deselect() {
-    ITextNode& n = *handle<ITextNode>();
-    n.selection_anchor = n.caret_pos;
+    SELF.selection_anchor = SELF.caret_pos;
     return *this;
 }
 
@@ -733,10 +756,8 @@ std::wstring TextNode::selected_text() const {
     return n.content.substr(n.sel_start(), n.sel_end() - n.sel_start());
 }
 
-TextNode& TextNode::on(Event event, std::function<void(TextNode&)> callback) {
-    Node::on(event, [callback] (WeakNode node) {
-        callback(node->as<TextNode>());
-    });
+TextNode& TextNode::on_char(std::function<bool(wchar_t ch)> callback) {
+    SELF.user_on_char = callback;
     return *this;
 }
 

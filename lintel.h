@@ -433,7 +433,9 @@ public:
     TextNode& deselect();
     std::wstring selected_text() const;
 
-    TextNode& on(Event event, std::function<void(TextNode&)> callback);
+    // Only one callback may be supplied, although it may be overwritten at any time.
+    // If the callback returns false, the input will not be written to the content
+    TextNode& on_char(std::function<bool(wchar_t ch)> callback);
 };
 
 struct DataSeries {
@@ -502,7 +504,12 @@ public:
     float       scroll_dx();
     float       scroll_dy();
 
+    float      delta_time() const;
+    float    time_elapsed() const;
+
     int run(std::function<void()> = nullptr);
+
+    static Window& get();
 };
 
 // ---------------------------------------------------------------------------

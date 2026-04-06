@@ -41,6 +41,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 // ===========================================================================
 // Window - construction / destruction
 // ===========================================================================
+
 Window::Window() {
     impl_allocate();
     this_win = iptr_;
@@ -103,7 +104,6 @@ Window::Window() {
     sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
     factory->CreateSwapChain(GPU.d3d_device.Get(), &sd, &iptr_->swapchain);
 }
-
 Window::~Window() {
     iptr_->doc.shutdown();
 }
@@ -127,6 +127,13 @@ bool        Window::key_repeat() { return iptr_->doc.input.key_repeat; }
 wchar_t     Window::key_char() { return iptr_->doc.input.key_char; }
 float       Window::scroll_dx() { return iptr_->doc.input.scroll_dx; }
 float       Window::scroll_dy() { return iptr_->doc.input.scroll_dy; }
+
+float Window::delta_time() const {
+    return iptr_->doc.ui_tick_dts;
+}
+float Window::time_elapsed() const {
+    return iptr_->doc.program_elapsed_s();
+}
 
 // ===========================================================================
 // Window - run loop
@@ -159,6 +166,10 @@ int Window::run(std::function<void()> fn) {
     }
 
     return 0;
+}
+
+/*static*/ Window& Window::get() {
+    return WeakImpl<Window>(this_win).as();
 }
 
 } // namespace lintel

@@ -1,15 +1,8 @@
 root:
-	background-color = #FFFFFF
+	background-color = #000000
 	align-items = center
 	justify = center
+
 	text "text":
-		content = "Hello"
-
-		width = 100
-		height = 100
-
-		text-color = #000000
+		content = "edit me"
 		editable = true
-
-		share = 1
-		display = true

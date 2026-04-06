@@ -1,3 +1,4 @@
+
 #pragma once
 #include "inode.h"
 
@@ -61,10 +62,10 @@ public:
     TextAlign    text_align_val = TextAlign::TextAlignLeft;
     bool         bold = false;
     bool         italic_val = false;
-    bool         wrap = true;
+    bool         wrap = false;
     bool         editable = false;
 
-    /* -- new: vertical centering & scrollbar -------------------------------- */
+    /* -- vertical centering & scrollbar -------------------------------- */
     bool         vertical_center = false;     // property::VerticalCenter
     bool         scrollbar_enabled = false;   // property::Scrollbar
 
@@ -74,6 +75,9 @@ public:
     size_t       selection_anchor = 0; // Fixed end of the selection.
     bool         has_focus = false;
     bool         lmb_selecting = false; // True while LMB is held for drag-select.
+    float        caret_blink_s = 0.0f;  // Incremented by ui tick delta time
+
+    std::function<bool(wchar_t ch)> user_on_char = nullptr;
 
     /* -- scrollbar state ---------------------------------------------------- */
     float        scroll_offset_y = 0.f;
@@ -119,7 +123,10 @@ public:
     void apply_callback(Key key) override;
 
     /* -- layout ------------------------------------------------------------- */
+
+    // Write to rect.w/rect.h given available space
     void measure(float avail_w, float avail_h) override;
+    // Write to rect.x/rect.y given slot
     void arrange(float slot_x, float slot_y)   override;
 
     /* -- rendering ---------------------------------------------------------- */
@@ -202,7 +209,12 @@ public:
      */
     void on_click_position(float lx, float ly, bool extend);
 
+    void text_dirty() {
+        if (wrap) self_dirty();
+        else propagate_dirty();
+    }
 private:
+    
     /* -- word-boundary helpers ---------------------------------------------- */
 
     size_t word_start(size_t pos) const;

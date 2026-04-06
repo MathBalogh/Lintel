@@ -1,8 +1,11 @@
+
+template button text:
+	background-color = #FF0000
+	content = "Hello, World!"
+
 root:
 	background-color = #000000
 	align-items = center
 	justify = center
-
-	text "text":
-		content = "edit me"
-		editable = true
+    
+	button

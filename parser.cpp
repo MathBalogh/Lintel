@@ -58,13 +58,16 @@ class Parser {
             if (sv == "on")
                 return parse_on_decl();
 
-            if (lexer_.peek(1).kind == TokenKind::Colon ||
-                (lexer_.peek(1).kind == TokenKind::Identifier &&
-                lexer_.peek(2).kind == TokenKind::Colon))
-                return parse_node_decl();
-
+            // NEW: properties use "ident = value" syntax.
+            // This check must come BEFORE the node-decl fallback
+            // so that "background-color = #000000" is parsed as PropDecl,
+            // not mistaken for a shorthand child node.
             if (lexer_.peek(1).kind == TokenKind::Equals)
                 return parse_prop_decl();
+
+            // Otherwise: node declaration (full form "tag:" / "tag name:"
+            // or the new shorthand one-liner "tag" with empty props).
+            return parse_node_decl();
         }
 
         unexpected(t, "block statement");
@@ -99,33 +102,56 @@ class Parser {
         return s;
     }
 
-    Node* parse_root_decl() {
-        Token t = lexer_.pop();
+    Node* parse_template_decl() {
+        Token kw = lexer_.pop();
+        Token name_t = lexer_.expect(TokenKind::Identifier, "template name");
+        Token base_t = lexer_.expect(TokenKind::Identifier, "base node type (node/text/graph/...)");
         lexer_.expect(TokenKind::Colon);
 
-        auto* n = ast_.make<NodeDecl>("root");
-        n->range(t);
-        n->props = parse_block();
-        return n;
+        auto* t = ast_.make<TemplateDecl>(
+            std::string(lexer_.slice(name_t)),
+            std::string(lexer_.slice(base_t))
+        );
+        t->range(kw);
+        t->range(name_t);
+        t->range(base_t);
+        t->props = parse_block();
+        return t;
     }
 
     // ── Node / On / Apply ────────────────────────────────────────────────────
     Node* parse_node_decl() {
+        // New implementation supporting both full form ("tag:" or "tag name:") 
+        // and shorthand one-liner ("tag" alone, no colon, empty props).
         Token tag_t = lexer_.pop();
         std::string tag(lexer_.slice(tag_t));
         std::string name;
 
+        // Optional name (only allowed in full form)
         if (lexer_.peek().kind == TokenKind::Identifier &&
             lexer_.peek(1).kind == TokenKind::Colon) {
             Token name_t = lexer_.pop();
             name = std::string(lexer_.slice(name_t));
         }
 
-        lexer_.expect(TokenKind::Colon);
+        // Catch misuse of name without colon (e.g. "button foo" with no ":")
+        if (lexer_.peek().kind == TokenKind::Identifier && name.empty()) {
+            unexpected(lexer_.peek(), "expected ':' after node tag (full form) or end-of-line (shorthand one-liner)");
+            lexer_.pop(); // recover
+        }
+
+        // Colon is now optional → shorthand = empty props, no block
+        const bool has_colon = lexer_.match(TokenKind::Colon);
 
         auto* n = ast_.make<NodeDecl>(std::move(tag), std::move(name));
         n->range(tag_t);
-        n->props = parse_block();
+
+        if (has_colon) {
+            n->props = parse_block();
+        }
+        else {
+            n->props = {}; // empty → no error, perfect one-liner
+        }
         return n;
     }
 
@@ -248,26 +274,20 @@ public:
                 ast_.nodes.push_back(parse_style_decl());
                 continue;
             }
+            if (t.kind == TokenKind::KwTemplate) {
+                ast_.nodes.push_back(parse_template_decl());
+                continue;
+            }
 
+            // "root:" (or any tag) is now just a normal NodeDecl handled by parse_node_decl.
+            // Shorthand "button" (no colon) works here too.
             if (t.kind == TokenKind::Identifier) {
-                std::string_view sv = lexer_.slice(t);
-
-                if (sv == "root" && lexer_.peek(1).kind == TokenKind::Colon) {
-                    ast_.nodes.push_back(parse_root_decl());
-                    continue;
-                }
-
-                if (lexer_.peek(1).kind == TokenKind::Colon ||
-                    (lexer_.peek(1).kind == TokenKind::Identifier &&
-                    lexer_.peek(2).kind == TokenKind::Colon)) {
-                    ast_.nodes.push_back(parse_node_decl());
-                    continue;
-                }
-
                 if (lexer_.peek(1).kind == TokenKind::Equals) {
                     ast_.nodes.push_back(parse_var_decl());
                     continue;
                 }
+                ast_.nodes.push_back(parse_node_decl()); // full or shorthand
+                continue;
             }
 
             unexpected(t, "top-level declaration");

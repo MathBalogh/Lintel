@@ -74,9 +74,13 @@ void IGraphNode::draw(Node& self, Canvas& canvas) {
                                        range_x_min, range_x_max,
                                        range_y_min, range_y_max);
 
+    canvas.push_clip({ cx, cy, cw, ch });
+
     draw_plot_grid(b, px, py, pw, ph, canvas);
     draw_series(b, px, py, pw, ph, canvas);
     draw_plot_labels(b, px, py, pw, ph, canvas);
+
+    canvas.pop_clip();
 }
 
 void IGraphNode::draw_series(const PlotBounds& b, float px, float py, float pw, float ph, Canvas& canvas) const {

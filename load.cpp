@@ -252,51 +252,75 @@ static StyleSheet build_stylesheet(const AST& ast, const StyleResolver& res) {
 class TreeBuilder {
     StyleSheet& sheet_;
     const StyleResolver& res_;
+    const std::unordered_map<std::string, const Node*>& templates_;
 
     void build(lintel::Node& parent, const NodeDecl& decl,
                const InheritedProps& inherited) {
 
-        lintel::Node node = create_node(decl.tag);
-        if (!node) {
-            std::cerr << "load: unknown node type '" << decl.tag << "' - skipped\n";
-            return;
+        const TemplateDecl* tmpl = nullptr;
+        {
+            auto it = templates_.find(decl.tag);
+            if (it != templates_.end()) {
+                tmpl = &it->second->as<TemplateDecl>();
+            }
+        }
+
+        lintel::Node node;
+        if (tmpl) {
+            node = create_node(tmpl->base);
+            if (!node) {
+                std::cerr << "load: unknown base node type '" << tmpl->base
+                    << "' for template '" << decl.tag << "' - skipped\n";
+                return;
+            }
+        }
+        else {
+            node = create_node(decl.tag);
+            if (!node) {
+                std::cerr << "load: unknown node type '" << decl.tag << "' - skipped\n";
+                return;
+            }
         }
         lintel::Node& n = parent.push(node);
 
         // 1. Seed with inherited values.
         apply_inherited(n, inherited);
 
-        // 2. Applied styles - iterate props in declaration order.
-        for (Node* child : decl.props) {
+        // Build effective content list: template (defaults) + local decl (overrides/additions)
+        std::vector<Node*> effective_props;
+        if (tmpl) {
+            effective_props = tmpl->props;
+        }
+        effective_props.insert(effective_props.end(), decl.props.begin(), decl.props.end());
+
+        // 2. Applied styles (template first, then local)
+        for (Node* child : effective_props) {
             if (!child || child->kind != NodeKind::ApplyExpr) continue;
             sheet_.apply(n, child->as<ApplyExpr>().style);
         }
 
-        // 3. Node-local properties (props only, not OnDecls or NodeDecls).
-        for (Node* child : decl.props) {
+        // 3. Node-local properties (template first → local overrides)
+        for (Node* child : effective_props) {
             if (!child || child->kind != NodeKind::PropDecl) continue;
             const PropDecl& pd = child->as<PropDecl>();
             StyleSheet::dispatch_prop(n, pd.property, node_to_prop(pd.property, pd.value, res_));
         }
 
-        // 4. Node-local event handlers.
-        for (Node* child : decl.props) {
+        // 4. Node-local event handlers (both template and local are added)
+        for (Node* child : effective_props) {
             if (!child || child->kind != NodeKind::OnDecl) continue;
             const OnDecl& od = child->as<OnDecl>();
-
             Event ev = get_event(od.event);
             if (ev == Event::Null) {
                 std::cerr << "load: unknown event '" << od.event << "' - skipped\n";
                 continue;
             }
-
             auto props = std::make_shared<std::vector<StyleSheet::Prop>>();
             for (Node* dp : od.props) {
                 if (!dp || dp->kind != NodeKind::PropDecl) continue;
                 const PropDecl& pd = dp->as<PropDecl>();
                 props->push_back({ pd.property, node_to_prop(pd.property, pd.value, res_) });
             }
-
             n.on(ev, [props] (WeakNode self) {
                 StyleSheet::apply_props(self.as(), *props);
             });
@@ -305,8 +329,8 @@ class TreeBuilder {
         // 5. Derive inherited props to pass down.
         const InheritedProps child_inh = derive_inherited(n, inherited);
 
-        // 6. Recurse into nested NodeDecls.
-        for (Node* child : decl.props) {
+        // 6. Recurse into nested NodeDecls (template children first, then local)
+        for (Node* child : effective_props) {
             if (!child || child->kind != NodeKind::NodeDecl) continue;
             build(n, child->as<NodeDecl>(), child_inh);
         }
@@ -317,8 +341,8 @@ class TreeBuilder {
     }
 
 public:
-    TreeBuilder(StyleSheet& sheet, const StyleResolver& res)
-        : sheet_(sheet), res_(res) {}
+    TreeBuilder(StyleSheet& sheet, const StyleResolver& res, const std::unordered_map<std::string, const Node*>& templates)
+        : sheet_(sheet), res_(res), templates_(templates) {}
 
     void run(lintel::Node& root, const AST& ast) {
         const InheritedProps blank{};
@@ -371,9 +395,17 @@ LoadResult load(const char* path) {
     // Pass 2b - resolve AST style nodes into a StyleSheet.
     StyleSheet sheet = parser::build_stylesheet(ast, resolver);
 
+    std::unordered_map<std::string, const parser::Node*> template_map;
+    for (const parser::Node* top : ast.nodes) {
+        if (top && top->kind == parser::NodeKind::TemplateDecl) {
+            const parser::TemplateDecl& td = top->as<parser::TemplateDecl>();
+            template_map[td.name] = top;
+        }
+    }
+
     // Pass 3 - build the runtime scene graph.
     LoadResult result;
-    parser::TreeBuilder(sheet, resolver).run(result.root, ast);
+    parser::TreeBuilder(sheet, resolver, template_map).run(result.root, ast);
     result.sheet = std::move(sheet);
 
     return result;

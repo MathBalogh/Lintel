@@ -29,6 +29,7 @@ enum class TokenKind {
     __KeywordsBegin,
     KwStyle,
     KwApply,
+    KwTemplate,
     __KeywordsEnd,
     __PunctuatorsBegin,
     Quote,      // kept in table for symmetry; lexer emits Identifier for "…"
@@ -70,6 +71,7 @@ enum class NodeKind {
     PropDecl,  // <ident> = <value>      (inside NodeDecl / StyleDecl)
     StyleDecl, // style <n> : <block>
     OnDecl,    // on <event> : <block>
+    TemplateDecl, // template <n> : <block> (reusable node structure)
 
     AST
 };
@@ -177,6 +179,14 @@ struct OnDecl : Node {
     std::string        event;
     std::vector<Node*> props;
     explicit OnDecl(std::string ev): Node(NodeKind::OnDecl), event(std::move(ev)) {}
+};
+
+struct TemplateDecl : Node {
+    std::string        name;
+    std::string        base;
+    std::vector<Node*> props;
+    explicit TemplateDecl(std::string n, std::string b)
+        : Node(NodeKind::TemplateDecl), name(std::move(n)), base(std::move(b)) {}
 };
 
 // ─── Root ─────────────────────────────────────────────────────────────────────

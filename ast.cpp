@@ -24,6 +24,7 @@ const char* to_string(TokenKind kind) {
         "<keywords-begin>",
         "style",
         "apply",
+        "template",
         "<keywords-end>",
         "<punctuators-begin>",
         "\"",

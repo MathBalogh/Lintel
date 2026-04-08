@@ -70,6 +70,12 @@ public:
 
         register_key("content");
         register_key("path");
+
+        register_node("node", [] () -> Node { return Node(); });
+        register_node("text", [] () -> Node { return TextNode(); });
+        register_node("graph", [] () -> Node { return GraphNode(); });
+        register_node("histogram", [] () -> Node { return HistogramNode(); });
+        register_node("image", [] () -> Node { return ImageNode(); });
     }
 
     Event get_event(const std::string& name) {

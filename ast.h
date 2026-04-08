@@ -30,11 +30,15 @@ enum class TokenKind {
     KwStyle,
     KwApply,
     KwTemplate,
+    KwAs,       // as  - names an instance: button #F00 as myBtn
     __KeywordsEnd,
     __PunctuatorsBegin,
     Quote,      // kept in table for symmetry; lexer emits Identifier for "…"
     Colon,
     Equals,
+    LParen,     // '(' - template parameter list open
+    RParen,     // ')' - template parameter list close
+    Comma,      // ',' - parameter separator
     Newline,    // '\n' - logical-line terminator
     Indent,     // synthetic - indentation level increased
     Dedent,     // synthetic - indentation level decreased
@@ -110,11 +114,11 @@ struct Node {
 // ─── Leaf expression nodes ────────────────────────────────────────────────────
 
 struct IdentExpr : Node {
-    std::string name; 
+    std::string name;
     explicit IdentExpr(std::string_view v): Node(NodeKind::IdentExpr), name(v) {}
 };
 struct NumExpr : Node {
-    std::string text; 
+    std::string text;
     explicit NumExpr(std::string_view v): Node(NodeKind::NumExpr), text(v) {}
 
     float to_number() const;
@@ -156,10 +160,11 @@ struct VarDecl : Node {
 
 struct NodeDecl : Node {
     std::string        tag;   // "node", "text", "graph", "root", or any registered type
-    std::string        name;  // optional identifier following the tag
+    std::string        id;    // optional instance identifier:  button #F00 as myBtn
+    std::vector<Node*> args;  // positional template arguments: button #FF0000 #00FF00
     std::vector<Node*> props; // PropDecl | NodeDecl | ApplyExpr | OnDecl
-    NodeDecl(std::string tag, std::string name = {})
-        : Node(NodeKind::NodeDecl), tag(std::move(tag)), name(std::move(name)) {}
+    explicit NodeDecl(std::string tag)
+        : Node(NodeKind::NodeDecl), tag(std::move(tag)) {}
 };
 
 struct PropDecl : Node {
@@ -181,10 +186,13 @@ struct OnDecl : Node {
     explicit OnDecl(std::string ev): Node(NodeKind::OnDecl), event(std::move(ev)) {}
 };
 
+// template myBtn node(bg, border):
+//   ^name   ^base ^params
 struct TemplateDecl : Node {
-    std::string        name;
-    std::string        base;
-    std::vector<Node*> props;
+    std::string              name;    // the template's own identifier
+    std::string              base;    // base node type  (node / text / graph / …)
+    std::vector<std::string> params;  // parameter names declared in (…)
+    std::vector<Node*>       props;
     explicit TemplateDecl(std::string n, std::string b)
         : Node(NodeKind::TemplateDecl), name(std::move(n)), base(std::move(b)) {}
 };

@@ -46,14 +46,14 @@
     <Filter Include="lib\nodes\canvas">
       <UniqueIdentifier>{1837a490-4524-4ab5-bbd3-8ddca78e5e62}</UniqueIdentifier>
     </Filter>
-    <Filter Include="lib\nodes\plots">
-      <UniqueIdentifier>{e2a854cc-4cfe-4c3f-bbc2-5df5a1d0d15a}</UniqueIdentifier>
+    <Filter Include="lib\nodes\graph">
+      <UniqueIdentifier>{b6cfe4b5-2a08-4e6d-b58c-faa95ea11e7c}</UniqueIdentifier>
     </Filter>
-    <Filter Include="lib\nodes\plots\histogram">
+    <Filter Include="lib\nodes\histogram">
       <UniqueIdentifier>{da6aea32-e110-4da2-b515-a4861c2e2a80}</UniqueIdentifier>
     </Filter>
-    <Filter Include="lib\nodes\plots\graph">
-      <UniqueIdentifier>{b6cfe4b5-2a08-4e6d-b58c-faa95ea11e7c}</UniqueIdentifier>
+    <Filter Include="lib\nodes\common">
+      <UniqueIdentifier>{e2a854cc-4cfe-4c3f-bbc2-5df5a1d0d15a}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -67,7 +67,7 @@
       <Filter>lib\nodes\text</Filter>
     </ClCompile>
     <ClCompile Include="igraphnode.cpp">
-      <Filter>lib\nodes\plots\graph</Filter>
+      <Filter>lib\nodes\graph</Filter>
     </ClCompile>
     <ClCompile Include="iimagenode.cpp">
       <Filter>lib\nodes\image</Filter>
@@ -99,9 +99,6 @@
     <ClCompile Include="document.cpp">
       <Filter>lib\document</Filter>
     </ClCompile>
-    <ClCompile Include="inode.cpp">
-      <Filter>lib\document</Filter>
-    </ClCompile>
     <ClCompile Include="registry.cpp">
       <Filter>lib\api</Filter>
     </ClCompile>
@@ -115,7 +112,10 @@
       <Filter>lib\nodes\canvas</Filter>
     </ClCompile>
     <ClCompile Include="ihistogramnode.cpp">
-      <Filter>lib\nodes\plots\histogram</Filter>
+      <Filter>lib\nodes\histogram</Filter>
+    </ClCompile>
+    <ClCompile Include="inode.cpp">
+      <Filter>lib\nodes</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -132,7 +132,7 @@
       <Filter>lib\nodes\text</Filter>
     </ClInclude>
     <ClInclude Include="igraphnode.h">
-      <Filter>lib\nodes\plots\graph</Filter>
+      <Filter>lib\nodes\graph</Filter>
     </ClInclude>
     <ClInclude Include="iimagenode.h">
       <Filter>lib\nodes\image</Filter>
@@ -155,9 +155,6 @@
     <ClInclude Include="document.h">
       <Filter>lib\document</Filter>
     </ClInclude>
-    <ClInclude Include="inode.h">
-      <Filter>lib\document</Filter>
-    </ClInclude>
     <ClInclude Include="visitor.h">
       <Filter>lib\language\ast</Filter>
     </ClInclude>
@@ -165,10 +162,13 @@
       <Filter>lib\nodes\canvas</Filter>
     </ClInclude>
     <ClInclude Include="ihistogramnode.h">
-      <Filter>lib\nodes\plots\histogram</Filter>
+      <Filter>lib\nodes\histogram</Filter>
     </ClInclude>
     <ClInclude Include="plot_common.h">
-      <Filter>lib\nodes\plots</Filter>
+      <Filter>lib\nodes\common</Filter>
+    </ClInclude>
+    <ClInclude Include="inode.h">
+      <Filter>lib\nodes</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -84,6 +84,9 @@ void ITextNode::apply_callback(Key key) {
         case Key::Editable:
             editable = props.get(Key::Editable);
             break;
+        default:
+            props.make_dirty();
+            break;
     }
 
     if (changed) { props.make_dirty(); invalidate_format(); }

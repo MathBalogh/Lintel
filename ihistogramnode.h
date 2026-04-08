@@ -27,18 +27,23 @@ public:
     float plot_top = 16.f;
     float plot_bottom = 40.f;
 
+    // Pixel height reserved at the top of the content rect for toggle segments.
+    // Automatically sized to fit one row of pills.
+    static constexpr float pill_strip_h = 24.f;
+    static constexpr float pill_pad_x = 8.f;  // horizontal text padding
+    static constexpr float pill_pad_y = 3.f;  // vertical text padding
+    static constexpr float pill_gap = 5.f;  // gap between pills
+
     void draw(Node& self, Canvas& canvas) override;
 
 private:
-    // Each DataSeries rendered as filled vertical bars (histogram style),
-    // clipped to the plot rectangle. Bars extend from the x-axis (y = 0)
-    // up to the data y-value. xs are treated as bin centers; bar width is
-    // derived from the spacing of the sorted xs (or a fixed fraction of
-    // the x-range when only a single bin is present). Multiple series
-    // are overlaid with per-series colors.
     void draw_series(const PlotBounds& b,
                      float px, float py, float pw, float ph,
                      Canvas& canvas) const;
+
+    // Pill hit-rects rebuilt each draw, consumed by handle_click.
+    struct PillRect { std::string key; float x, y, w, h; };
+    mutable std::vector<PillRect> pill_rects_;
 };
 
 } // namespace lintel

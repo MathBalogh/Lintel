@@ -126,6 +126,9 @@ Token Lexer::next() {
     // ── Single-character punctuators ─────────────────────────────────────────
     if (c == ':') { ++cur_; return make(TokenKind::Colon, b, cur_); }
     if (c == '=') { ++cur_; return make(TokenKind::Equals, b, cur_); }
+    if (c == '(') { ++cur_; return make(TokenKind::LParen, b, cur_); }
+    if (c == ')') { ++cur_; return make(TokenKind::RParen, b, cur_); }
+    if (c == ',') { ++cur_; return make(TokenKind::Comma, b, cur_); }
 
     // ── Keywords / identifiers ────────────────────────────────────────────────
     if (is_ident_start(c)) return keyword_or_ident();

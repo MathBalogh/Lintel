@@ -15,16 +15,6 @@
 
 namespace lintel::parser {
 
-// ─── Node registrations ───────────────────────────────────────────────────────
-
-static bool s_registered = ([] {
-    register_node<lintel::Node>("node");
-    register_node<lintel::TextNode>("text");
-    register_node<lintel::GraphNode>("graph");
-    register_node<lintel::ImageNode>("image");
-    return true;
-})();
-
 // ─── Helpers for new Property / UIValue / Enum system ────────────────────────
 //
 // After the property refactor, values must be turned into the exact
@@ -88,19 +78,39 @@ static lintel::Property try_parse_enum(std::string_view prop_key, const std::str
     return {};
 }
 
+// ─── Template argument bindings ──────────────────────────────────────────────
+//
+// Maps parameter name → the caller-supplied AST value node.
+// Built by TreeBuilder::build when it detects a template instantiation with args.
+
+using TemplateArgs = std::unordered_map<std::string, const Node*>;
+
 // ─── AST value → PropValue (key-aware) ───────────────────────────────────────
 //
 // Now takes the property name so we can emit UIValue / enum Property variants.
 // Variable resolution still follows one level exactly as before.
+// `targs` carries template-parameter bindings for the current instantiation;
+// they shadow VarDecl lookups so that `background-color = bg` resolves `bg`
+// to the caller-supplied value rather than a global variable.
 
-static lintel::Property node_to_prop(std::string_view key, const Node* node, const StyleResolver& res) {
+static lintel::Property node_to_prop(std::string_view key, const Node* node,
+                                     const StyleResolver& res,
+                                     const TemplateArgs& targs = {}) {
     if (!node) return {};
+
+    // Ident that names a template parameter → substitute caller's value.
+    if (node->kind == NodeKind::IdentExpr) {
+        const std::string& name = node->as<IdentExpr>().name;
+        auto it = targs.find(name);
+        if (it != targs.end())
+            return node_to_prop(key, it->second, res, targs);
+    }
 
     // Ident that names a VarDecl → follow exactly one level (old behaviour).
     if (node->kind == NodeKind::IdentExpr) {
         const std::string& name = node->as<IdentExpr>().name;
         if (const Node* target = res.var(name))
-            return node_to_prop(key, target, res);
+            return node_to_prop(key, target, res, targs);
     }
 
     switch (node->kind) {
@@ -265,6 +275,27 @@ class TreeBuilder {
             }
         }
 
+        // ── Build template-argument bindings ─────────────────────────────────
+        // Map each declared parameter name to the caller-supplied value node.
+        // Extra args are ignored; missing args leave the parameter unbound
+        // (resolves to identifier string, same as before the feature existed).
+        TemplateArgs targs;
+        if (tmpl && !tmpl->params.empty()) {
+            for (size_t i = 0; i < tmpl->params.size() && i < decl.args.size(); ++i)
+                targs[tmpl->params[i]] = decl.args[i];
+
+            if (decl.args.size() > tmpl->params.size()) {
+                std::cerr << "load: template '" << decl.tag << "' expects "
+                    << tmpl->params.size() << " argument(s), got "
+                    << decl.args.size() << " - extra args ignored\n";
+            }
+            if (decl.args.size() < tmpl->params.size()) {
+                std::cerr << "load: template '" << decl.tag << "' expects "
+                    << tmpl->params.size() << " argument(s), got "
+                    << decl.args.size() << " - unbound params keep their name\n";
+            }
+        }
+
         lintel::Node node;
         if (tmpl) {
             node = create_node(tmpl->base);
@@ -303,7 +334,8 @@ class TreeBuilder {
         for (Node* child : effective_props) {
             if (!child || child->kind != NodeKind::PropDecl) continue;
             const PropDecl& pd = child->as<PropDecl>();
-            StyleSheet::dispatch_prop(n, pd.property, node_to_prop(pd.property, pd.value, res_));
+            StyleSheet::dispatch_prop(n, pd.property,
+                                      node_to_prop(pd.property, pd.value, res_, targs));
         }
 
         // 4. Node-local event handlers (both template and local are added)
@@ -319,7 +351,10 @@ class TreeBuilder {
             for (Node* dp : od.props) {
                 if (!dp || dp->kind != NodeKind::PropDecl) continue;
                 const PropDecl& pd = dp->as<PropDecl>();
-                props->push_back({ pd.property, node_to_prop(pd.property, pd.value, res_) });
+                // Event handlers capture targs by value so the closure is
+                // self-contained even after the instantiation scope ends.
+                props->push_back({ pd.property,
+                    node_to_prop(pd.property, pd.value, res_, targs) });
             }
             n.on(ev, [props] (WeakNode self) {
                 StyleSheet::apply_props(self.as(), *props);
@@ -336,8 +371,8 @@ class TreeBuilder {
         }
 
         // 7. Register named nodes for cross-reference via find().
-        if (!decl.name.empty())
-            sheet_.register_node(decl.name, WeakNode(n.handle()));
+        if (!decl.id.empty())
+            sheet_.register_node(decl.id, WeakNode(n.handle()));
     }
 
 public:

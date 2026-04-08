@@ -130,6 +130,8 @@ class Lexer {
 public:
     AST& root_;
 
+    std::string_view source() const { return src_; }
+
     explicit Lexer(std::string_view src, AST& root)
         : src_(src), cur_(0), root_(root) {
         root_.source = src;

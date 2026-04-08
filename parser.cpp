@@ -103,15 +103,36 @@ class Parser {
     }
 
     Node* parse_template_decl() {
+        // Syntax:  template <name> <base> [( <param> , … )] :
+        //   template myBtn  node :
+        //   template myBtn  node (bg, border) :
         Token kw = lexer_.pop();
         Token name_t = lexer_.expect(TokenKind::Identifier, "template name");
         Token base_t = lexer_.expect(TokenKind::Identifier, "base node type (node/text/graph/...)");
+
+        // Optional parameter list  (bg, border, …)
+        std::vector<std::string> params;
+        if (lexer_.peek().kind == TokenKind::LParen) {
+            lexer_.pop(); // consume '('
+            while (lexer_.peek().kind != TokenKind::RParen &&
+                   lexer_.peek().kind != TokenKind::EndOfFile) {
+                if (lexer_.peek().kind == TokenKind::Identifier) {
+                    Token pt = lexer_.pop();
+                    params.push_back(std::string(lexer_.slice(pt)));
+                }
+                // Skip commas between parameters.
+                lexer_.match(TokenKind::Comma);
+            }
+            lexer_.expect(TokenKind::RParen, "')' closing template parameter list");
+        }
+
         lexer_.expect(TokenKind::Colon);
 
         auto* t = ast_.make<TemplateDecl>(
             std::string(lexer_.slice(name_t)),
             std::string(lexer_.slice(base_t))
         );
+        t->params = std::move(params);
         t->range(kw);
         t->range(name_t);
         t->range(base_t);
@@ -121,37 +142,56 @@ class Parser {
 
     // ── Node / On / Apply ────────────────────────────────────────────────────
     Node* parse_node_decl() {
-        // New implementation supporting both full form ("tag:" or "tag name:") 
-        // and shorthand one-liner ("tag" alone, no colon, empty props).
+        // Syntax:
+        //   tag [args…] [as <id>] :    ← full form with block
+        //   tag [args…] [as <id>]      ← shorthand, empty props
+        //
+        // 'as <id>' explicitly names this instance for later lookup.
+        // Template args are any value tokens that appear before 'as' / ':' / newline.
         Token tag_t = lexer_.pop();
         std::string tag(lexer_.slice(tag_t));
-        std::string name;
 
-        // Optional name (only allowed in full form)
-        if (lexer_.peek().kind == TokenKind::Identifier &&
-            lexer_.peek(1).kind == TokenKind::Colon) {
-            Token name_t = lexer_.pop();
-            name = std::string(lexer_.slice(name_t));
+        // Collect positional arguments: value tokens up to 'as', ':', or line end.
+        auto is_arg_end = [this] {
+            switch (lexer_.peek().kind) {
+                case TokenKind::KwAs:
+                case TokenKind::Colon:
+                case TokenKind::Newline:
+                case TokenKind::Indent:
+                case TokenKind::Dedent:
+                case TokenKind::EndOfFile:
+                    return true;
+                default:
+                    return false;
+            }
+        };
+
+        std::vector<Node*> args;
+        while (!is_arg_end()) {
+            Node* a = parse_expr();
+            if (!a) break;
+            args.push_back(a);
         }
 
-        // Catch misuse of name without colon (e.g. "button foo" with no ":")
-        if (lexer_.peek().kind == TokenKind::Identifier && name.empty()) {
-            unexpected(lexer_.peek(), "expected ':' after node tag (full form) or end-of-line (shorthand one-liner)");
-            lexer_.pop(); // recover
+        // Optional instance identifier:  as myRef
+        std::string id;
+        if (lexer_.peek().kind == TokenKind::KwAs) {
+            lexer_.pop(); // consume 'as'
+            Token id_t = lexer_.expect(TokenKind::Identifier, "instance identifier after 'as'");
+            id = std::string(lexer_.slice(id_t));
         }
 
-        // Colon is now optional → shorthand = empty props, no block
         const bool has_colon = lexer_.match(TokenKind::Colon);
 
-        auto* n = ast_.make<NodeDecl>(std::move(tag), std::move(name));
+        auto* n = ast_.make<NodeDecl>(std::move(tag));
+        n->id = std::move(id);
+        n->args = std::move(args);
         n->range(tag_t);
 
-        if (has_colon) {
+        if (has_colon)
             n->props = parse_block();
-        }
-        else {
-            n->props = {}; // empty → no error, perfect one-liner
-        }
+        // else: shorthand one-liner, props stay empty
+
         return n;
     }
 

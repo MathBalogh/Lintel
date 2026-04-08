@@ -76,7 +76,7 @@ Node* INode::find_hit(Node& self, float sx, float sy) {
     }
     return &self;
 }
-void INode::update_hover(NodePtr self, float sx, float sy) {
+void INode::update_hover(NodeView self, float sx, float sy) {
     if (!is_displayed()) {
         // Ensure we clear stale hover state if this node was hidden mid-hover.
         if (mouse_inside && doc_) {
@@ -107,7 +107,7 @@ void INode::update_hover(NodePtr self, float sx, float sy) {
     }
 
     for (Node& child : children)
-        child.handle<INode>()->update_hover(NodePtr(child), sx, sy);
+        child.handle<INode>()->update_hover(NodeView(child), sx, sy);
 }
 
 // ---------------------------------------------------------------------------
@@ -120,7 +120,7 @@ void INode::update_hover(NodePtr self, float sx, float sy) {
 void INode::bubble_up(Event type) {
     if (!doc_) return;
 
-    NodePtr cursor = parent;
+    NodeView cursor = parent;
     while (cursor) {
         INode* ancestor = cursor.handle<INode>();
         if (!ancestor) break;
@@ -552,7 +552,7 @@ Node& Node::push(Node& incoming) {
 
     INode* inc = incoming.handle<INode>();
     if (inc->parent) {
-        NodePtr old_parent = inc->parent;
+        NodeView old_parent = inc->parent;
         old_parent->remove(incoming);
     }
 
@@ -688,7 +688,7 @@ void INode::self_dirty() {
     props.make_dirty();
 }
 void INode::propagate_dirty() {
-    NodePtr node = NodePtr(this);
+    NodeView node = NodeView(this);
     while (node) {
         node->handle()->props.make_dirty();
         node = node->handle()->parent;

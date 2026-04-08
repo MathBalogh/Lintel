@@ -42,8 +42,8 @@ struct InputState {
 // ---------------------------------------------------------------------------
 
 struct FocusState {
-    NodePtr focused;
-    NodePtr hovered;
+    NodeView focused;
+    NodeView hovered;
 };
 
 // ---------------------------------------------------------------------------
@@ -53,17 +53,17 @@ struct FocusState {
 struct PointerState {
     static constexpr float k_drag_threshold = 4.f;
 
-    NodePtr    pressed = {};
+    NodeView    pressed = {};
     MouseButton press_btn = MouseButton::None;
     float       press_sx = 0.f;
     float       press_sy = 0.f;
 
     bool        drag_pending = false;
     bool        drag_active = false;
-    NodePtr    drag_src = {};
+    NodeView    drag_src = {};
     MouseButton drag_btn = MouseButton::None;
 
-    NodePtr  last_click_node = {};
+    NodeView  last_click_node = {};
     ULONGLONG last_click_ms = 0;
     float     last_click_sx = 0.f;
     float     last_click_sy = 0.f;
@@ -110,6 +110,7 @@ struct WindowMessage {
 //
 class Document {
     std::thread               worker_;
+    std::condition_variable   cv_;
     std::mutex                mut_;         // guards the message queue
     std::mutex                render_mut_;  // guards swap-chain / D2D targets
     std::queue<WindowMessage> queue_;
@@ -147,14 +148,14 @@ public:
 
     // -- Named-node registry ---------------------------------------------
 
-    std::unordered_map<std::string, NodePtr> named_nodes;
+    std::unordered_map<std::string, NodeView> named_nodes;
 
-    void     register_named(std::string name, NodePtr node) {
+    void     register_named(std::string name, NodeView node) {
         named_nodes[std::move(name)] = node;
     }
-    NodePtr get_named(const std::string& name) {
+    NodeView get_named(const std::string& name) {
         auto it = named_nodes.find(name);
-        return it != named_nodes.end() ? it->second : NodePtr(nullptr);
+        return it != named_nodes.end() ? it->second : NodeView(nullptr);
     }
 
     // -- Weak-ref cleanup ------------------------------------------------
@@ -200,7 +201,7 @@ public:
     // Set keyboard focus to an arbitrary node (or clear it with a null/empty
     // WeakNode).  Fires Blur on the old focus and Focus on the new one.
 
-    void set_focus(NodePtr target);
+    void set_focus(NodeView target);
 
     // Advance focus to the next focusable node in document order (Tab).
     void focus_next();
@@ -229,19 +230,19 @@ public:
 
 inline void fire_with_context(
     Document& doc,
-    class INode* impl, NodePtr handle,
+    class INode* impl, NodeView handle,
     Event type, float local_x, float local_y,
     MouseButton btn, Modifiers mods,
     float scroll_dx = 0.f, float scroll_dy = 0.f);
 
 inline void fire_key_context(
     Document& doc,
-    class INode* impl, NodePtr handle,
+    class INode* impl, NodeView handle,
     Event type, int vkey, bool repeat, Modifiers mods);
 
 inline void fire_char_context(
     Document& doc,
-    class INode* impl, NodePtr handle,
+    class INode* impl, NodeView handle,
     wchar_t ch, Modifiers mods);
 
 } // namespace lintel

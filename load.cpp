@@ -356,7 +356,7 @@ class TreeBuilder {
                 props->push_back({ pd.property,
                     node_to_prop(pd.property, pd.value, res_, targs) });
             }
-            n.on(ev, [props] (NodePtr self) {
+            n.on(ev, [props] (NodeView self) {
                 StyleSheet::apply_props(self.as(), *props);
             });
         }
@@ -372,7 +372,7 @@ class TreeBuilder {
 
         // 7. Register named nodes for cross-reference via find().
         if (!decl.id.empty())
-            sheet_.register_node(decl.id, NodePtr(n.handle()));
+            sheet_.register_node(decl.id, NodeView(n.handle()));
     }
 
 public:

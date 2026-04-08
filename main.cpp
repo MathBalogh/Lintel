@@ -11,7 +11,7 @@ int main() {
     win.root() = std::move(node);
 
     View<TextNode> x, y;
-    sheet.find({ {x.as<NodePtr>(), "x"}, {y.as<NodePtr>(), "y"}});
+    sheet.find({ {x, "x"}, {y, "y"}});
 
     return win.run();
 }

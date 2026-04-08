@@ -113,6 +113,9 @@ public:
     bool operator!=(const View& o) const noexcept { return iptr_ != o.iptr_; }
 
     explicit operator bool() const noexcept { return iptr_ != nullptr; }
+    operator View<void>& () {
+        return *reinterpret_cast<View<void>*>(this);
+    }
 };
 
 } // namespace lintel

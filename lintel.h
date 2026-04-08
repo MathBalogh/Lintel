@@ -401,7 +401,7 @@ public:
     float mouse_y() const;
     Rect     rect() const;
 };
-using NodePtr = View<Node>;
+using NodeView = View<Node>;
 
 class CanvasNode : public Node {
 public:
@@ -560,9 +560,9 @@ public:
 
     // -- Query -------------------------------------------------------
 
-    void register_node(const std::string& name, NodePtr node);
-    NodePtr find(const char* name);
-    void find(std::initializer_list<std::pair<NodePtr&, const char*>>);
+    void register_node(const std::string& name, NodeView node);
+    NodeView find(const char* name);
+    void find(std::initializer_list<std::pair<View<void>&, const char*>>);
 
     template<typename T>
     View<T> find(const char* name) {
@@ -573,7 +573,7 @@ public:
     // Apply props to n using the given mode.
     static void apply_props(Node& n, const std::vector<Prop>& props);
 private:
-    std::unordered_map<std::string, NodePtr> named_;
+    std::unordered_map<std::string, NodeView> named_;
     std::unordered_map<std::string, Style> styles_;
 
     // Register event handlers on n so that each handler fires animate() on

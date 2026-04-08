@@ -97,17 +97,17 @@ void ITextNode::apply_callback(Key key) {
 // ---------------------------------------------------------------------------
 
 void ITextNode::wire_events(Node& handle) {
-    handle.on(Event::Focus, [this] (NodePtr) {
+    handle.on(Event::Focus, [this] (NodeView) {
         has_focus = true;
     });
 
-    handle.on(Event::Blur, [this] (NodePtr) {
+    handle.on(Event::Blur, [this] (NodeView) {
         has_focus = false;
         caret_pos = selection_anchor = 0;
         lmb_selecting = scrollbar_dragging = false;
     });
 
-    handle.on(Event::MouseDown, [this] (NodePtr self) {
+    handle.on(Event::MouseDown, [this] (NodeView self) {
         float mx = self->mouse_x(), my = self->mouse_y();
 
         if (is_scrollbar_visible() && is_in_scrollbar(mx, my)) {
@@ -129,7 +129,7 @@ void ITextNode::wire_events(Node& handle) {
         on_click_position(mx, my, doc_->input.modifiers.shift);
     });
 
-    handle.on(Event::MouseMove, [this] (NodePtr self) {
+    handle.on(Event::MouseMove, [this] (NodeView self) {
         if (scrollbar_dragging) {
             float usable = inner_h() - thumb_height();
             if (usable > 0.f) {
@@ -142,15 +142,15 @@ void ITextNode::wire_events(Node& handle) {
             on_click_position(self->mouse_x(), self->mouse_y(), /*extend=*/true);
     });
 
-    handle.on(Event::MouseUp, [this] (NodePtr) {
+    handle.on(Event::MouseUp, [this] (NodeView) {
         lmb_selecting = scrollbar_dragging = false;
     });
 
-    handle.on(Event::Char, [this] (NodePtr) {
+    handle.on(Event::Char, [this] (NodeView) {
         if (editable && has_focus) on_input(doc_->input.key_char);
     });
 
-    handle.on(Event::KeyDown, [this] (NodePtr) {
+    handle.on(Event::KeyDown, [this] (NodeView) {
         if (!has_focus) return;
         const bool shift = doc_->input.modifiers.shift;
         const bool ctrl = doc_->input.modifiers.ctrl;

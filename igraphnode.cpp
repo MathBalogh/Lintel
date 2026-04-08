@@ -15,7 +15,7 @@ GraphNode::GraphNode(): Node(nullptr) {
     allocate<IGraphNode>();
     handle<IGraphNode>()->props.set(Key::Share, 0.f);
 
-    on(Event::Click, [] (NodePtr weak) {
+    on(Event::Click, [] (NodeView weak) {
         auto self = weak.handle<IGraphNode>();
 
         float mx = self->doc_->input.mouse_screen_x;

@@ -216,7 +216,7 @@ void StyleSheet::apply_props(Node& n, const std::vector<Prop>& props) {
 void StyleSheet::wire_handlers(Node& n, const std::vector<Handler>& handlers) {
     for (const Handler& h : handlers) {
         auto shared_deltas = std::make_shared<const std::vector<Prop>>(h.deltas);
-        n.on(h.event, [h] (NodePtr self) {
+        n.on(h.event, [h] (NodeView self) {
             StyleSheet::apply_props(self.as(), h.deltas);
         });
     }
@@ -247,17 +247,17 @@ StyleSheet& StyleSheet::define_handler(const std::string& name, Event event, std
     return *this;
 }
 
-void StyleSheet::register_node(const std::string& name, NodePtr node) {
+void StyleSheet::register_node(const std::string& name, NodeView node) {
     named_[name] = node;
 }
-NodePtr StyleSheet::find(const char* name) {
+NodeView StyleSheet::find(const char* name) {
     if (auto it = named_.find(name); it != named_.end())
         return it->second;
-    return NodePtr(nullptr);
+    return NodeView(nullptr);
 }
-void StyleSheet::find(std::initializer_list<std::pair<NodePtr&, const char*>> list) {
+void StyleSheet::find(std::initializer_list<std::pair<View<void>&, const char*>> list) {
     for (auto& [node, name] : list) {
-        node = find(name);
+        node.as<NodeView>() = find(name);
     }
 }
 

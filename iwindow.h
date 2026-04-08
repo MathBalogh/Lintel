@@ -215,6 +215,6 @@ public:
 };
 
 // Explicit instantiation - keeps Impl<IWindow> specialisation in this TU.
-template class Impl<IWindow>;
+template class Owner<IWindow>;
 
 } // namespace lintel

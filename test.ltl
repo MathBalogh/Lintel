@@ -3,6 +3,9 @@ root:
 	background-color = #000000
 	align-items = center
 	justify = center
-	graph as x:
-		width = 400
-		height = 400
+	
+	text as x:
+		content = "a"
+
+	text as y:
+		content = "b"

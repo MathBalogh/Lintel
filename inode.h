@@ -86,7 +86,7 @@ public:
     // -- Core state -------------------------------------------------------
 
     Rect              rect = {};
-    WeakNode          parent;
+    NodePtr          parent;
     std::vector<Node> children;
     Properties        props;
 
@@ -150,12 +150,12 @@ public:
             [type] (const HandlerEntry& e) { return e.type == type; }),
             handlers_.end());
     }
-    void invoke_handlers(WeakNode handle, Event type) const {
+    void invoke_handlers(NodePtr handle, Event type) const {
         HandlerList snapshot = handlers_;
         for (const HandlerEntry& e : snapshot)
             if (e.type == type) e.fn(handle);
     }
-    void fire(WeakNode self, Event type) {
+    void fire(NodePtr self, Event type) {
         invoke_handlers(self, type);
     }
 
@@ -200,7 +200,7 @@ public:
     // update_hover is called by Document::dispatch_mouse_move / leave.
     // It fires MouseEnter / MouseLeave events on nodes whose mouse_inside
     // state changes.  Uses doc_ to reach InputState.
-    void update_hover(WeakNode self, float sx, float sy);
+    void update_hover(NodePtr self, float sx, float sy);
 
     // bubble_up re-fires an already-dispatched event up the parent chain,
     // adjusting mouse coordinates at each ancestor.
@@ -229,7 +229,7 @@ private:
     // ci's cross-size if Align::Stretch is active.
     float resolve_cross(AxisLayout ax, INode* ci);
 };
-extern template class Impl<INode>;
+extern template class Owner<INode>;
 
 // ---------------------------------------------------------------------------
 // Fire helpers - inline free functions
@@ -240,7 +240,7 @@ extern template class Impl<INode>;
 
 inline void fire_with_context(
     Document& doc,
-    INode* impl, WeakNode handle,
+    INode* impl, NodePtr handle,
     Event type, float local_x, float local_y,
     MouseButton btn, Modifiers mods,
     float scroll_dx, float scroll_dy) {
@@ -260,7 +260,7 @@ inline void fire_with_context(
 
 inline void fire_key_context(
     Document& doc,
-    INode* impl, WeakNode handle,
+    INode* impl, NodePtr handle,
     Event type, int vkey, bool repeat, Modifiers mods) {
     InputState& inp = doc.input;
     inp.key_vkey = vkey;
@@ -275,7 +275,7 @@ inline void fire_key_context(
 
 inline void fire_char_context(
     Document& doc,
-    INode* impl, WeakNode handle,
+    INode* impl, NodePtr handle,
     wchar_t ch, Modifiers mods) {
     InputState& inp = doc.input;
     inp.key_char = ch;

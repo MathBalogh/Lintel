@@ -58,12 +58,10 @@ void IImageNode::arrange(float slot_x, float slot_y) {
 }
 void IImageNode::apply_callback(Key key) {
     if (key == get_key("path")) {
-        if (Property* prop = props.find(key)) {
-            if (prop->is_wstring()) {
-                image_path_ = to_string(prop->get_wstring());
-                invalidate_bitmap();
-                props.make_dirty();
-            }
+        if (const auto* prop = props.get_wstring(key)) {
+            image_path_ = to_string(*prop);
+            invalidate_bitmap();
+            props.make_dirty();
         }
     }
 }
@@ -87,12 +85,12 @@ void IImageNode::draw(Node& /*self*/, Canvas& canvas) {
 // ---------------------------------------------------------------------------
 
 ImageNode::ImageNode(): Node(nullptr) {
-    impl_allocate<IImageNode>();
+    allocate<IImageNode>();
     handle<IImageNode>()->props.set(Key::Share, 0.f); // shrink-wrap by default
 }
 
 ImageNode::ImageNode(std::string_view path): Node(nullptr) {
-    impl_allocate<IImageNode>();
+    allocate<IImageNode>();
     IImageNode& n = *handle<IImageNode>();
     n.image_path_ = path;
     n.props.set(Key::Share, 0.f);

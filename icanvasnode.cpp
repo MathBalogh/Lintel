@@ -5,7 +5,7 @@
 namespace lintel {
 
 CanvasNode::CanvasNode(): Node(nullptr) {
-    impl_allocate<ICanvasNode>();
+    allocate<ICanvasNode>();
 }
 
 void CanvasNode::fill(Color c) {

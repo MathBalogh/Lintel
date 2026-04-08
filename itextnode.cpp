@@ -29,8 +29,8 @@ void ITextNode::apply_callback(Key key) {
     bool changed = false;
 
     if (key == get_key("content")) {
-        if (const auto* str = props.find(key, Property::Type::WString)) {
-            content = str->get_wstring();
+        if (const auto* str = props.get_wstring(key)) {
+            content = *str;
             content_height_ = 0.f;
             scroll_offset_y = 0.f;
         }
@@ -39,8 +39,8 @@ void ITextNode::apply_callback(Key key) {
 
     switch (key.index) {
         case Key::FontFamily:
-            if (const auto* v = props.find(Key::FontFamily, Property::Type::WString))
-                if (v->get_wstring() != font_family) { font_family = v->get_wstring(); changed = true; }
+            if (const auto* v = props.get_wstring(Key::FontFamily))
+                if (*v != font_family) { font_family = *v; changed = true; }
             break;
         case Key::FontSize:
             if (const auto* v = props.get_float(Key::FontSize))
@@ -50,20 +50,20 @@ void ITextNode::apply_callback(Key key) {
             if (const Color* v = props.get_color(Key::TextColor)) text_color = *v;
             break;
         case Key::Bold:
-            if (const auto* v = props.find(Key::Bold, Property::Type::Bool))
-                if (v->get_bool() != bold) { bold = *v; changed = true; }
+            if (const auto* v = props.get_bool(Key::Bold))
+                if (*v != bold) { bold = *v; changed = true; }
             break;
         case Key::Italic:
-            if (const auto* v = props.find(Key::Italic, Property::Type::Bool))
-                if (v->get_bool() != italic_val) { italic_val = *v; changed = true; }
+            if (const auto* v = props.get_bool(Key::Italic))
+                if (*v != italic_val) { italic_val = *v; changed = true; }
             break;
         case Key::Wrap:
-            if (const auto* v = props.find(Key::Wrap, Property::Type::Bool))
-                if (v->get_bool() != wrap) { wrap = *v; changed = true; }
+            if (const auto* v = props.get_bool(Key::Wrap))
+                if (*v != wrap) { wrap = *v; changed = true; }
             break;
         case Key::TextAlign:
-            if (const auto* v = props.find(Key::TextAlign, Property::Type::Enum)) {
-                TextAlign ta = (TextAlign) v->get_enum();
+            if (const auto* v = props.get_enum(Key::TextAlign)) {
+                TextAlign ta = (TextAlign) *v;
                 if (ta != text_align_val) { text_align_val = ta; changed = true; }
             }
             break;
@@ -97,17 +97,17 @@ void ITextNode::apply_callback(Key key) {
 // ---------------------------------------------------------------------------
 
 void ITextNode::wire_events(Node& handle) {
-    handle.on(Event::Focus, [this] (WeakNode) {
+    handle.on(Event::Focus, [this] (NodePtr) {
         has_focus = true;
     });
 
-    handle.on(Event::Blur, [this] (WeakNode) {
+    handle.on(Event::Blur, [this] (NodePtr) {
         has_focus = false;
         caret_pos = selection_anchor = 0;
         lmb_selecting = scrollbar_dragging = false;
     });
 
-    handle.on(Event::MouseDown, [this] (WeakNode self) {
+    handle.on(Event::MouseDown, [this] (NodePtr self) {
         float mx = self->mouse_x(), my = self->mouse_y();
 
         if (is_scrollbar_visible() && is_in_scrollbar(mx, my)) {
@@ -129,7 +129,7 @@ void ITextNode::wire_events(Node& handle) {
         on_click_position(mx, my, doc_->input.modifiers.shift);
     });
 
-    handle.on(Event::MouseMove, [this] (WeakNode self) {
+    handle.on(Event::MouseMove, [this] (NodePtr self) {
         if (scrollbar_dragging) {
             float usable = inner_h() - thumb_height();
             if (usable > 0.f) {
@@ -142,15 +142,15 @@ void ITextNode::wire_events(Node& handle) {
             on_click_position(self->mouse_x(), self->mouse_y(), /*extend=*/true);
     });
 
-    handle.on(Event::MouseUp, [this] (WeakNode) {
+    handle.on(Event::MouseUp, [this] (NodePtr) {
         lmb_selecting = scrollbar_dragging = false;
     });
 
-    handle.on(Event::Char, [this] (WeakNode) {
+    handle.on(Event::Char, [this] (NodePtr) {
         if (editable && has_focus) on_input(doc_->input.key_char);
     });
 
-    handle.on(Event::KeyDown, [this] (WeakNode) {
+    handle.on(Event::KeyDown, [this] (NodePtr) {
         if (!has_focus) return;
         const bool shift = doc_->input.modifiers.shift;
         const bool ctrl = doc_->input.modifiers.ctrl;
@@ -159,15 +159,15 @@ void ITextNode::wire_events(Node& handle) {
 
         switch (doc_->input.key_vkey) {
             case VK_BACK:   if (editable) on_backspace(); break;
-            case VK_DELETE: if (editable) on_delete();    break;
+            case VK_DELETE: if (editable) on_delete(); break;
             case VK_LEFT:  nav([&] { ctrl ? on_move_word_left(shift) : on_move_left(shift);  }); break;
             case VK_RIGHT: nav([&] { ctrl ? on_move_word_right(shift) : on_move_right(shift); }); break;
             case VK_HOME:  nav([&] { on_move_home(shift); }); break;
             case VK_END:   nav([&] { on_move_end(shift);  }); break;
-            case 0x41: if (ctrl) { selection_anchor = 0; caret_pos = content.size(); } break; // Ctrl+A
-            case 0x43: if (ctrl) copy_to_clipboard();                                  break; // Ctrl+C
-            case 0x58: if (ctrl && editable) { copy_to_clipboard(); if (has_selection()) delete_selection(); } break; // Ctrl+X
-            case 0x56: if (ctrl && editable) paste_from_clipboard();                   break; // Ctrl+V
+            case 0x41: /* Ctrl+A */ if (ctrl) { selection_anchor = 0; caret_pos = content.size(); } break;
+            case 0x43: /* Ctrl+C */ if (ctrl) copy_to_clipboard(); break;
+            case 0x58: /* Ctrl+X */ if (ctrl && editable) { copy_to_clipboard(); if (has_selection()) delete_selection(); } break;
+            case 0x56: /* Ctrl+VA */ if (ctrl && editable) paste_from_clipboard(); break;
             default: break;
         }
     });
@@ -539,7 +539,7 @@ void ITextNode::paste_from_clipboard() {
 // ---------------------------------------------------------------------------
 
 TextNode::TextNode(): Node(nullptr) {
-    impl_allocate<ITextNode>();
+    allocate<ITextNode>();
     ITextNode& n = *handle<ITextNode>();
     n.props.set(Key::Share, 0.f);
     n.props.make_dirty();
@@ -548,7 +548,7 @@ TextNode::TextNode(): Node(nullptr) {
 }
 
 TextNode::TextNode(const std::wstring& initial_content): Node(nullptr) {
-    impl_allocate<ITextNode>();
+    allocate<ITextNode>();
     ITextNode& n = *handle<ITextNode>();
     n.content = initial_content;
     n.props.set(get_key("content"), initial_content);

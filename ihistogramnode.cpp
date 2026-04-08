@@ -8,7 +8,7 @@ namespace lintel {
 // ---------------------------------------------------------------------------
 
 HistogramNode::HistogramNode(): Node(nullptr) {
-    impl_allocate<IHistogramNode>();
+    allocate<IHistogramNode>();
     // shrink-wrap by default
     handle<IHistogramNode>()->props.set(Key::Share, 0.f);
 }

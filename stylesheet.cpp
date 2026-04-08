@@ -216,7 +216,7 @@ void StyleSheet::apply_props(Node& n, const std::vector<Prop>& props) {
 void StyleSheet::wire_handlers(Node& n, const std::vector<Handler>& handlers) {
     for (const Handler& h : handlers) {
         auto shared_deltas = std::make_shared<const std::vector<Prop>>(h.deltas);
-        n.on(h.event, [h] (WeakNode self) {
+        n.on(h.event, [h] (NodePtr self) {
             StyleSheet::apply_props(self.as(), h.deltas);
         });
     }
@@ -247,13 +247,18 @@ StyleSheet& StyleSheet::define_handler(const std::string& name, Event event, std
     return *this;
 }
 
-void StyleSheet::register_node(const std::string& name, WeakNode node) {
+void StyleSheet::register_node(const std::string& name, NodePtr node) {
     named_[name] = node;
 }
-WeakNode StyleSheet::find(const char* name) {
+NodePtr StyleSheet::find(const char* name) {
     if (auto it = named_.find(name); it != named_.end())
         return it->second;
-    return WeakNode(nullptr);
+    return NodePtr(nullptr);
+}
+void StyleSheet::find(std::initializer_list<std::pair<NodePtr&, const char*>> list) {
+    for (auto& [node, name] : list) {
+        node = find(name);
+    }
 }
 
 bool StyleSheet::has_style(std::string_view name) const {

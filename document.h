@@ -42,8 +42,8 @@ struct InputState {
 // ---------------------------------------------------------------------------
 
 struct FocusState {
-    WeakNode focused;
-    WeakNode hovered;
+    NodePtr focused;
+    NodePtr hovered;
 };
 
 // ---------------------------------------------------------------------------
@@ -53,17 +53,17 @@ struct FocusState {
 struct PointerState {
     static constexpr float k_drag_threshold = 4.f;
 
-    WeakNode    pressed = {};
+    NodePtr    pressed = {};
     MouseButton press_btn = MouseButton::None;
     float       press_sx = 0.f;
     float       press_sy = 0.f;
 
     bool        drag_pending = false;
     bool        drag_active = false;
-    WeakNode    drag_src = {};
+    NodePtr    drag_src = {};
     MouseButton drag_btn = MouseButton::None;
 
-    WeakNode  last_click_node = {};
+    NodePtr  last_click_node = {};
     ULONGLONG last_click_ms = 0;
     float     last_click_sx = 0.f;
     float     last_click_sy = 0.f;
@@ -147,14 +147,14 @@ public:
 
     // -- Named-node registry ---------------------------------------------
 
-    std::unordered_map<std::string, WeakNode> named_nodes;
+    std::unordered_map<std::string, NodePtr> named_nodes;
 
-    void     register_named(std::string name, WeakNode node) {
+    void     register_named(std::string name, NodePtr node) {
         named_nodes[std::move(name)] = node;
     }
-    WeakNode get_named(const std::string& name) {
+    NodePtr get_named(const std::string& name) {
         auto it = named_nodes.find(name);
-        return it != named_nodes.end() ? it->second : WeakNode(nullptr);
+        return it != named_nodes.end() ? it->second : NodePtr(nullptr);
     }
 
     // -- Weak-ref cleanup ------------------------------------------------
@@ -173,7 +173,7 @@ public:
     // -- Window back-pointer ---------------------------------------------
     //
     // Set by Window before start() is called.
-    WeakImpl<class IWindow> window;
+    View<class IWindow> window;
 
     // Optional per-frame callback (supplied by Window::run()).
     std::function<void()> thread_tick;
@@ -200,7 +200,7 @@ public:
     // Set keyboard focus to an arbitrary node (or clear it with a null/empty
     // WeakNode).  Fires Blur on the old focus and Focus on the new one.
 
-    void set_focus(WeakNode target);
+    void set_focus(NodePtr target);
 
     // Advance focus to the next focusable node in document order (Tab).
     void focus_next();
@@ -229,19 +229,19 @@ public:
 
 inline void fire_with_context(
     Document& doc,
-    class INode* impl, WeakNode handle,
+    class INode* impl, NodePtr handle,
     Event type, float local_x, float local_y,
     MouseButton btn, Modifiers mods,
     float scroll_dx = 0.f, float scroll_dy = 0.f);
 
 inline void fire_key_context(
     Document& doc,
-    class INode* impl, WeakNode handle,
+    class INode* impl, NodePtr handle,
     Event type, int vkey, bool repeat, Modifiers mods);
 
 inline void fire_char_context(
     Document& doc,
-    class INode* impl, WeakNode handle,
+    class INode* impl, NodePtr handle,
     wchar_t ch, Modifiers mods);
 
 } // namespace lintel

@@ -43,7 +43,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 // ===========================================================================
 
 Window::Window() {
-    impl_allocate();
+    allocate();
     this_win = iptr_;
 
     // -----------------------------------------------------------------------
@@ -153,7 +153,7 @@ int Window::run(std::function<void()> fn) {
 
     // Kick off the worker thread (layout + draw + present loop).
     iptr_->doc.thread_tick = std::move(fn);
-    iptr_->doc.window = WeakImpl<IWindow>(iptr_);
+    iptr_->doc.window = View<IWindow>(iptr_);
     iptr_->doc.resize_now();
     iptr_->doc.start();
 
@@ -169,7 +169,7 @@ int Window::run(std::function<void()> fn) {
 }
 
 /*static*/ Window& Window::get() {
-    return WeakImpl<Window>(this_win).as();
+    return View<Window>(this_win).as();
 }
 
 } // namespace lintel

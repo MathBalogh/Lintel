@@ -174,6 +174,10 @@ bool Properties::has(Key key) const noexcept {
     }
 }
 
+bool* Properties::get_bool(Key key) {
+    if (auto it = cold_.find(key); it != cold_.end() && it->second.is_bool()) return &it->second.get_bool();
+    return nullptr;
+}
 float* Properties::get_float(Key key) {
     if (key.is_hot_float()) {
         unsigned int rel = key.hot_float_index();
@@ -184,6 +188,14 @@ float* Properties::get_float(Key key) {
     else if (auto it = cold_.find(key); it != cold_.end() && it->second.is_float()) {
         return &it->second.get_float();
     }
+    return nullptr;
+}
+unsigned int* Properties::get_enum(Key key) {
+    if (auto it = cold_.find(key); it != cold_.end() && it->second.is_enum()) return &it->second.get_enum();
+    return nullptr;
+}
+UIValue* Properties::get_ui(Key key) {
+    if (auto it = cold_.find(key); it != cold_.end() && it->second.is_ui()) return &it->second.get_ui();
     return nullptr;
 }
 Color* Properties::get_color(Key key) {
@@ -198,17 +210,8 @@ Color* Properties::get_color(Key key) {
     }
     return nullptr;
 }
-
-Property* Properties::find(Key key) {
-    if (auto it = cold_.find(key); it != cold_.end()) {
-        return &it->second;
-    }
-    return nullptr;
-}
-Property* Properties::find(Key key, Property::Type type) {
-    if (auto it = cold_.find(key); it != cold_.end() && it->second.type() == type) {
-        return &it->second;
-    }
+std::wstring* Properties::get_wstring(Key key) {
+    if (auto it = cold_.find(key); it != cold_.end() && it->second.is_wstring()) return &it->second.get_wstring();
     return nullptr;
 }
 
@@ -229,10 +232,6 @@ Property Properties::get(Key key) const {
         return it->second;
     }
     return Property();
-}
-Property Properties::get_or(Key key, Property::Type type, Property or_) const {
-    Property it = get(key);
-    return it.type() != type ? or_ : it;
 }
 
 // --- Constructors ---
@@ -404,42 +403,56 @@ bool Property::is_wstring() const noexcept { return type_ == Type::WString; }
 
 // --- Getters ---
 
-bool Property::get_bool() const noexcept {
+bool& Property::get_bool() {
     assert(is_bool());
     return *ptr<bool>();
 }
-
-float Property::get_float() const noexcept {
-    assert(is_float());
-    return *ptr<float>();
+bool Property::get_bool() const {
+    assert(is_bool());
+    return *ptr<bool>();
 }
 
 float& Property::get_float() {
     assert(is_float());
     return *ptr<float>();
 }
+float Property::get_float() const {
+    assert(is_float());
+    return *ptr<float>();
+}
 
-unsigned int Property::get_enum() const noexcept {
+unsigned int& Property::get_enum() {
     assert(is_enum());
     return *ptr<unsigned int>();
 }
-
-Color Property::get_color() const noexcept {
-    assert(is_color());
-    return *ptr<Color>();
+unsigned int Property::get_enum() const {
+    assert(is_enum());
+    return *ptr<unsigned int>();
 }
 
 Color& Property::get_color() {
     assert(is_color());
     return *ptr<Color>();
 }
+Color Property::get_color() const {
+    assert(is_color());
+    return *ptr<Color>();
+}
 
-UIValue Property::get_ui() const noexcept {
+UIValue& Property::get_ui() {
+    assert(is_ui());
+    return *ptr<UIValue>();
+}
+UIValue Property::get_ui() const {
     assert(is_ui());
     return *ptr<UIValue>();
 }
 
-const std::wstring& Property::get_wstring() const noexcept {
+std::wstring& Property::get_wstring() {
+    assert(is_wstring());
+    return *ptr<std::wstring>();
+}
+const std::wstring& Property::get_wstring() const {
     assert(is_wstring());
     return *ptr<std::wstring>();
 }

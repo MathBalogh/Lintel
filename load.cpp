@@ -183,13 +183,13 @@ struct InheritedProps {
 static InheritedProps derive_inherited(const lintel::Node& n, const InheritedProps& parent) {
     InheritedProps out = parent;
     Properties& a = const_cast<lintel::Node&>(n)->props;
-    if (Property* v = a.find(Key::FontFamily, Property::Type::WString)) out.font_family = v->get_wstring();
-    if (Property* v = a.find(Key::FontSize)) out.font_size = *v;
-    if (Property* v = a.find(Key::TextColor)) out.text_color = v->get_color();
-    if (Property* v = a.find(Key::Bold)) out.bold = *v;
-    if (Property* v = a.find(Key::Italic)) out.italic = *v;
-    if (Property* v = a.find(Key::Wrap)) out.wrap = *v;
-    if (Property* v = a.find(Key::Opacity)) out.opacity = *v;
+    if (auto* v = a.get_wstring(Key::FontFamily)) out.font_family = *v;
+    if (auto v = a.get_color(Key::TextColor)) out.text_color = *v;
+    if (auto v = a.get(Key::FontSize))  out.font_size  = v;
+    if (auto v = a.get(Key::Bold))      out.bold       = v;
+    if (auto v = a.get(Key::Italic))    out.italic     = v;
+    if (auto v = a.get(Key::Wrap))      out.wrap       = v;
+    if (auto v = a.get(Key::Opacity))   out.opacity    = v;
     return out;
 }
 
@@ -356,7 +356,7 @@ class TreeBuilder {
                 props->push_back({ pd.property,
                     node_to_prop(pd.property, pd.value, res_, targs) });
             }
-            n.on(ev, [props] (WeakNode self) {
+            n.on(ev, [props] (NodePtr self) {
                 StyleSheet::apply_props(self.as(), *props);
             });
         }
@@ -372,7 +372,7 @@ class TreeBuilder {
 
         // 7. Register named nodes for cross-reference via find().
         if (!decl.id.empty())
-            sheet_.register_node(decl.id, WeakNode(n.handle()));
+            sheet_.register_node(decl.id, NodePtr(n.handle()));
     }
 
 public:

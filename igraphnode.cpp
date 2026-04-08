@@ -12,10 +12,10 @@ namespace lintel {
 // ---------------------------------------------------------------------------
 
 GraphNode::GraphNode(): Node(nullptr) {
-    impl_allocate<IGraphNode>();
+    allocate<IGraphNode>();
     handle<IGraphNode>()->props.set(Key::Share, 0.f);
 
-    on(Event::Click, [] (WeakNode weak) {
+    on(Event::Click, [] (NodePtr weak) {
         auto self = weak.handle<IGraphNode>();
 
         float mx = self->doc_->input.mouse_screen_x;
@@ -102,8 +102,8 @@ void IGraphNode::draw(Node& self, Canvas& canvas) {
     draw_plot_labels(b, px, py, pw, ph, canvas);
 
     // Hover readout — also unclipped so the label never gets cut off at edges.
-    const float mx = self.mouse_x();
-    const float my = self.mouse_y();
+    const float mx = self->doc_->input.mouse_screen_x;
+    const float my = self->doc_->input.mouse_screen_y;
     if (mx >= px && mx <= px + pw && my >= py && my <= py + ph)
         draw_hover_label(b, px, py, pw, ph, mx, my, canvas);
 }

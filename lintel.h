@@ -209,7 +209,7 @@ struct hash<lintel::Key> {
 } // namespace std
 
 // ---------------------------------------------------------------------------
-// Types
+// Property
 // ---------------------------------------------------------------------------
 
 namespace lintel {
@@ -252,23 +252,26 @@ public:
     bool is_color() const noexcept;
     bool is_wstring() const noexcept;
 
-    bool         get_bool()  const noexcept;
-    float        get_float() const noexcept;
-    float& get_float();
-    unsigned int get_enum()  const noexcept;
-    Color        get_color() const noexcept;
-    Color& get_color();
-    UIValue      get_ui()    const noexcept;
+    bool&         get_bool();
+    bool          get_bool() const;
+    float&        get_float();
+    float         get_float() const;
+    unsigned int& get_enum();
+    unsigned int  get_enum() const;
+    Color&        get_color();
+    Color         get_color() const;
+    UIValue&      get_ui();
+    UIValue       get_ui() const;
 
-    const std::wstring& get_wstring() const noexcept;
+    std::wstring& get_wstring();
+    const std::wstring& get_wstring() const;
 
     bool operator==(const std::wstring&) const;
 
-    operator bool()   const noexcept;
-    operator float()  const noexcept;
-    operator Color()  const noexcept;
+    operator bool()    const noexcept;
+    operator float()   const noexcept;
+    operator Color()   const noexcept;
     operator UIValue() const noexcept;
-
 private:
     // Compute max size safely
     static constexpr size_t DATA_SIZE =
@@ -325,14 +328,14 @@ public:
     Properties& clear(Key key);
     bool has(Key key) const noexcept;
 
-    float* get_float(Key key);
-    Color* get_color(Key key);
-
-    Property* find(Key key);
-    Property* find(Key key, Property::Type type);
+    bool*         get_bool(Key key);
+    float*        get_float(Key key);
+    unsigned int* get_enum(Key key);
+    UIValue*      get_ui(Key key);
+    Color*        get_color(Key key);
+    std::wstring* get_wstring(Key key);
 
     Property get(Key key) const;
-    Property get_or(Key key, Property::Type type, Property or_) const;
 };
 
 } // namespace std
@@ -347,9 +350,9 @@ namespace lintel {
 // Node
 // ---------------------------------------------------------------------------
 
-class Node : public Impl<class INode> {
+class Node : public Owner<class INode> {
 public:
-    using EventHandler = std::function<void(WeakImpl<Node>)>;
+    using EventHandler = std::function<void(View<Node>)>;
 
     Node();
     explicit Node(std::nullptr_t);
@@ -398,7 +401,7 @@ public:
     float mouse_y() const;
     Rect     rect() const;
 };
-using WeakNode = WeakImpl<Node>;
+using NodePtr = View<Node>;
 
 class CanvasNode : public Node {
 public:
@@ -483,7 +486,7 @@ public:
 // Window
 // ---------------------------------------------------------------------------
 
-class Window : public Impl<class IWindow> {
+class Window : public Owner<class IWindow> {
 public:
     Window();
     ~Window();
@@ -557,19 +560,20 @@ public:
 
     // -- Query -------------------------------------------------------
 
-    void register_node(const std::string& name, WeakNode node);
-    WeakNode find(const char* name);
+    void register_node(const std::string& name, NodePtr node);
+    NodePtr find(const char* name);
+    void find(std::initializer_list<std::pair<NodePtr&, const char*>>);
 
     template<typename T>
-    WeakImpl<T> find(const char* name) {
-        if (auto base = find(name)) return WeakImpl<T>(base.handle());
-        return WeakImpl<T>(nullptr);
+    View<T> find(const char* name) {
+        if (auto base = find(name)) return View<T>(base.handle());
+        return View<T>(nullptr);
     }
 
     // Apply props to n using the given mode.
     static void apply_props(Node& n, const std::vector<Prop>& props);
 private:
-    std::unordered_map<std::string, WeakNode> named_;
+    std::unordered_map<std::string, NodePtr> named_;
     std::unordered_map<std::string, Style> styles_;
 
     // Register event handlers on n so that each handler fires animate() on

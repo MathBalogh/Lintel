@@ -114,7 +114,7 @@ void Document::bind_root() {
 // Document - focus control
 // ---------------------------------------------------------------------------
 
-void Document::set_focus(WeakNode target) {
+void Document::set_focus(NodePtr target) {
     if (focus.focused == target) return;
 
     if (focus.focused) {
@@ -141,18 +141,18 @@ void Document::focus_next() {
 
     INode* current = focus.focused.handle<INode>();
     if (!current) {
-        set_focus(WeakNode(static_cast<void*>(focusable.front())));
+        set_focus(NodePtr(static_cast<void*>(focusable.front())));
         return;
     }
 
     for (size_t i = 0; i < focusable.size(); ++i) {
         if (focusable[i] == current) {
-            set_focus(WeakNode(static_cast<void*>(
+            set_focus(NodePtr(static_cast<void*>(
                 focusable[(i + 1) % focusable.size()])));
             return;
         }
     }
-    set_focus(WeakNode(static_cast<void*>(focusable.front())));
+    set_focus(NodePtr(static_cast<void*>(focusable.front())));
 }
 
 // ---------------------------------------------------------------------------
@@ -170,7 +170,7 @@ void Document::dispatch_mouse_move(float sx, float sy, Modifiers mods) {
     input.mouse_screen_y = sy;
 
     if (root_impl)
-        root_impl->update_hover(WeakNode(root), sx, sy);
+        root_impl->update_hover(NodePtr(root), sx, sy);
 
     if (pointer.drag_active) {
         if (pointer.drag_src) {
@@ -211,7 +211,7 @@ void Document::dispatch_mouse_move(float sx, float sy, Modifiers mods) {
         if (root_impl) {
             if (Node* hit = root_impl->find_hit(root, sx, sy)) {
                 INode* hi = hit->handle<INode>();
-                fire_with_context(*this, hi, WeakNode(hi), Event::MouseMove,
+                fire_with_context(*this, hi, NodePtr(hi), Event::MouseMove,
                                   sx - hi->content_x(), sy - hi->content_y(),
                                   pointer.press_btn, mods);
                 hi->bubble_up(Event::MouseMove);
@@ -223,7 +223,7 @@ void Document::dispatch_mouse_move(float sx, float sy, Modifiers mods) {
 void Document::dispatch_mouse_leave() {
     INode* root_impl = root.handle<INode>();
     if (root_impl)
-        root_impl->update_hover(WeakNode(root), -1.f, -1.f);
+        root_impl->update_hover(NodePtr(root), -1.f, -1.f);
 }
 
 void Document::dispatch_mouse_down(float sx, float sy,
@@ -235,16 +235,16 @@ void Document::dispatch_mouse_down(float sx, float sy,
     INode* hi = hit->handle<INode>();
 
     set_focus(hi->focusable_flag
-              ? WeakNode(static_cast<void*>(hi))
-              : WeakNode{});
+              ? NodePtr(static_cast<void*>(hi))
+              : NodePtr{});
 
-    pointer.pressed = WeakNode(static_cast<void*>(hi));
+    pointer.pressed = NodePtr(static_cast<void*>(hi));
     pointer.press_btn = btn;
     pointer.press_sx = sx;
     pointer.press_sy = sy;
     pointer.drag_pending = hi->draggable_flag;
 
-    fire_with_context(*this, hi, WeakNode(hi), Event::MouseDown,
+    fire_with_context(*this, hi, NodePtr(hi), Event::MouseDown,
                       sx - hi->content_x(), sy - hi->content_y(),
                       btn, mods);
     hi->bubble_up(Event::MouseDown);
@@ -274,14 +274,14 @@ void Document::dispatch_mouse_up(float sx, float sy,
         if (Node* hit = root_impl ? root_impl->find_hit(root, sx, sy) : nullptr) {
             INode* hi = hit->handle<INode>();
 
-            fire_with_context(*this, hi, WeakNode(hi), Event::MouseUp,
+            fire_with_context(*this, hi, NodePtr(hi), Event::MouseUp,
                               sx - hi->content_x(), sy - hi->content_y(),
                               btn, mods);
             hi->bubble_up(Event::MouseUp);
 
             if (hi == pointer.pressed.handle<INode>()) {
                 if (btn == MouseButton::Right) {
-                    fire_with_context(*this, hi, WeakNode(hi),
+                    fire_with_context(*this, hi, NodePtr(hi),
                                       Event::RightClick,
                                       sx - hi->content_x(),
                                       sy - hi->content_y(),
@@ -300,7 +300,7 @@ void Document::dispatch_mouse_up(float sx, float sy,
 
                     if (same_node && close_pos && in_time) {
                         fire_with_context(*this, hi,
-                                          WeakNode(hit->handle()),
+                                          NodePtr(hit->handle()),
                                           Event::DoubleClick,
                                           sx - hi->content_x(),
                                           sy - hi->content_y(),
@@ -310,14 +310,14 @@ void Document::dispatch_mouse_up(float sx, float sy,
                     }
                     else {
                         fire_with_context(*this, hi,
-                                          WeakNode(hit->handle()),
+                                          NodePtr(hit->handle()),
                                           Event::Click,
                                           sx - hi->content_x(),
                                           sy - hi->content_y(),
                                           btn, mods);
                         hi->bubble_up(Event::Click);
 
-                        pointer.last_click_node = WeakNode(static_cast<void*>(hi));
+                        pointer.last_click_node = NodePtr(static_cast<void*>(hi));
                         pointer.last_click_ms = now;
                         pointer.last_click_sx = sx;
                         pointer.last_click_sy = sy;
@@ -341,7 +341,7 @@ void Document::dispatch_scroll(float sx, float sy,
 
     if (Node* hit = root_impl->find_hit(root, sx, sy)) {
         INode* hi = hit->handle<INode>();
-        fire_with_context(*this, hi, WeakNode(hi), Event::Scroll,
+        fire_with_context(*this, hi, NodePtr(hi), Event::Scroll,
                           sx - hi->content_x(), sy - hi->content_y(),
                           MouseButton::None, mods, dx, dy);
         hi->bubble_up(Event::Scroll);

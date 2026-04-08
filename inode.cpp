@@ -5,7 +5,7 @@
 
 namespace lintel {
 
-template class Impl<INode>;
+template class Owner<INode>;
 
 // ===========================================================================
 // Layout accessors
@@ -76,7 +76,7 @@ Node* INode::find_hit(Node& self, float sx, float sy) {
     }
     return &self;
 }
-void INode::update_hover(WeakNode self, float sx, float sy) {
+void INode::update_hover(NodePtr self, float sx, float sy) {
     if (!is_displayed()) {
         // Ensure we clear stale hover state if this node was hidden mid-hover.
         if (mouse_inside && doc_) {
@@ -107,7 +107,7 @@ void INode::update_hover(WeakNode self, float sx, float sy) {
     }
 
     for (Node& child : children)
-        child.handle<INode>()->update_hover(WeakNode(child), sx, sy);
+        child.handle<INode>()->update_hover(NodePtr(child), sx, sy);
 }
 
 // ---------------------------------------------------------------------------
@@ -120,7 +120,7 @@ void INode::update_hover(WeakNode self, float sx, float sy) {
 void INode::bubble_up(Event type) {
     if (!doc_) return;
 
-    WeakNode cursor = parent;
+    NodePtr cursor = parent;
     while (cursor) {
         INode* ancestor = cursor.handle<INode>();
         if (!ancestor) break;
@@ -512,17 +512,17 @@ void INode::draw_default(Canvas& canvas) {
 // now happens inside INode::~INode() via the doc_ back-pointer, so the Node
 // shell has no special teardown work to do.
 
-Node::Node() { impl_allocate(); }
+Node::Node() { allocate(); }
 Node::Node(std::nullptr_t) {}
 Node::~Node() = default;
 
 Node::Node(Node&& other) noexcept
-    : Impl<INode>(std::move(other)) {}
+    : Owner<INode>(std::move(other)) {}
 
 Node& Node::operator=(Node&& other) noexcept {
     if (this != &other) {
         iptr_->doc_->stamp_document(other.handle(), iptr_->doc_);
-        Impl<INode>::operator=(std::move(other));
+        Owner<INode>::operator=(std::move(other));
     }
     return *this;
 }
@@ -552,7 +552,7 @@ Node& Node::push(Node& incoming) {
 
     INode* inc = incoming.handle<INode>();
     if (inc->parent) {
-        WeakNode old_parent = inc->parent;
+        NodePtr old_parent = inc->parent;
         old_parent->remove(incoming);
     }
 
@@ -659,8 +659,8 @@ void Node::clear_on_of(Event type) {
 // ===========================================================================
 
 Rect  Node::rect()    const { return iptr_->rect; }
-float Node::mouse_x() const { return iptr_->rect.x - iptr_->doc_->input.mouse_screen_x; }
-float Node::mouse_y() const { return iptr_->rect.y - iptr_->doc_->input.mouse_screen_y; }
+float Node::mouse_x() const { return iptr_->doc_->input.mouse_screen_x - iptr_->rect.x; }
+float Node::mouse_y() const { return iptr_->doc_->input.mouse_screen_y - iptr_->rect.y; }
 
 // ===========================================================================
 // propagate_dirty
@@ -688,7 +688,7 @@ void INode::self_dirty() {
     props.make_dirty();
 }
 void INode::propagate_dirty() {
-    WeakNode node = WeakNode(this);
+    NodePtr node = NodePtr(this);
     while (node) {
         node->handle()->props.make_dirty();
         node = node->handle()->parent;

@@ -3,7 +3,7 @@
 namespace lintel {
 
 // ---------------------------------------------------------------------------
-// Impl<T>
+// Owner<T>
 // ---------------------------------------------------------------------------
 //
 // Owning, move-only wrapper around a heap-allocated implementation pointer.
@@ -14,32 +14,29 @@ namespace lintel {
 // that calls impl_allocate<>().
 //
 template<typename T>
-class Impl {
+class Owner {
+    void release() noexcept { delete iptr_; iptr_ = nullptr; }
 protected:
     T* iptr_;
-
-    void    impl_release() noexcept { delete iptr_; iptr_ = nullptr; }
-    void impl_no_release() noexcept { iptr_ = nullptr; }
-
+    
     // Allocate a fresh implementation object, optionally of a subtype.
     template<typename I = T>
-    void impl_allocate() {
-        impl_release();
+    void allocate() {
+        release();
         iptr_ = new I();
     }
-
 public:
-    Impl() noexcept: iptr_(nullptr) {}
-    explicit Impl(T* i) noexcept: iptr_(i) {}
-    ~Impl() { impl_release(); }
+    Owner() noexcept: iptr_(nullptr) {}
+    explicit Owner(T* i) noexcept: iptr_(i) {}
+    ~Owner() { release(); }
 
-    Impl(const Impl&) = delete;
-    Impl& operator=(const Impl&) = delete;
+    Owner(const Owner&)            = delete;
+    Owner& operator=(const Owner&) = delete;
 
-    Impl(Impl&& other) noexcept: iptr_(other.iptr_) { other.iptr_ = nullptr; }
-    Impl& operator=(Impl&& other) noexcept {
+    Owner(Owner&& other) noexcept: iptr_(other.iptr_) { other.iptr_ = nullptr; }
+    Owner& operator=(Owner&& other) noexcept {
         if (this != &other) {
-            impl_release();
+            release();
             iptr_ = other.iptr_;
             other.iptr_ = nullptr;
         }
@@ -60,11 +57,11 @@ public:
 
     explicit operator bool() const noexcept { return iptr_ != nullptr; }
 
-    template<typename I> friend class WeakImpl;
+    template<typename I> friend class View;
 };
 
 // ---------------------------------------------------------------------------
-// WeakImpl<Interface>
+// View<Interface>
 // ---------------------------------------------------------------------------
 //
 // Non-owning, copyable handle to an implementation pointer.  The stored
@@ -74,25 +71,24 @@ public:
 // Interface is the type exposed by operator-> and the default for as<>().
 //
 template<typename Interface>
-class WeakImpl {
+class View {
     void* iptr_;
-
 public:
-    WeakImpl() noexcept: iptr_(nullptr) {}
-    explicit WeakImpl(void* ptr) noexcept: iptr_(ptr) {}
+    View() noexcept: iptr_(nullptr) {}
+    explicit View(void* ptr) noexcept: iptr_(ptr) {}
 
-    WeakImpl(const WeakImpl&) = default;
-    WeakImpl& operator=(const WeakImpl&) = default;
-    WeakImpl(WeakImpl&&) = default;
-    WeakImpl& operator=(WeakImpl&&) = default;
+    View(const View&)            = default;
+    View& operator=(const View&) = default;
+    View(View&&)                 = default;
+    View& operator=(View&&)      = default;
 
     // Borrow a reference from an owning handle.
     template<typename T>
-    explicit WeakImpl(const Impl<T>& owner) noexcept: iptr_(owner.iptr_) {}
+    explicit View(const Owner<T>& owner) noexcept: iptr_(owner.iptr_) {}
 
     // Re-point to a different owning handle without transferring ownership.
     template<typename T>
-    WeakImpl& operator=(const Impl<T>& owner) noexcept {
+    View& operator=(const Owner<T>& owner) noexcept {
         iptr_ = owner.iptr_;
         return *this;
     }
@@ -101,21 +97,20 @@ public:
     void reset() noexcept { iptr_ = nullptr; }
 
     // Typed or raw pointer access.
-    template<typename I = void>       I* handle() { return reinterpret_cast<I*>(iptr_); }
+    template<typename I = void>       I* handle()       { return reinterpret_cast<I*>(iptr_); }
     template<typename I = void> const I* handle() const { return reinterpret_cast<const I*>(iptr_); }
 
     // Reinterpret this non-owning container as another container type.
-    template<typename U = Interface>
-    U& as() { return *reinterpret_cast<U*>(this); }
+    template<typename U = Interface> U& as() { return *reinterpret_cast<U*>(this); }
 
-    Interface* operator->() { return reinterpret_cast<Interface*>(this); }
+    Interface*       operator->()       { return reinterpret_cast<Interface*>(this); }
     const Interface* operator->() const { return reinterpret_cast<const Interface*>(this); }
 
     // Raw-pointer and same-type equality.
     bool operator==(const void* o) const noexcept { return iptr_ == o; }
-    bool operator==(const WeakImpl& o) const noexcept { return iptr_ == o.iptr_; }
+    bool operator==(const View& o) const noexcept { return iptr_ == o.iptr_; }
     bool operator!=(const void* o) const noexcept { return iptr_ != o; }
-    bool operator!=(const WeakImpl& o) const noexcept { return iptr_ != o.iptr_; }
+    bool operator!=(const View& o) const noexcept { return iptr_ != o.iptr_; }
 
     explicit operator bool() const noexcept { return iptr_ != nullptr; }
 };

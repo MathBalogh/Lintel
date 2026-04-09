@@ -37,6 +37,7 @@ public:
             { "border-weight", Key::BorderWeight },
             { "border-radius", Key::BorderRadius },
             { "text-color", Key::TextColor },
+            { "content", Key::Content },
             { "font-size", Key::FontSize },
             { "font-family", Key::FontFamily },
             { "width", Key::Width },
@@ -68,7 +69,6 @@ public:
             { "opacity", Key::Opacity },
         };
 
-        register_key("content");
         register_key("path");
 
         register_node("node", [] () -> Node { return Node(); });
@@ -76,6 +76,7 @@ public:
         register_node("graph", [] () -> Node { return GraphNode(); });
         register_node("histogram", [] () -> Node { return HistogramNode(); });
         register_node("image", [] () -> Node { return ImageNode(); });
+        register_node("canvas", [] () -> Node { return CanvasNode(); });
     }
 
     Event get_event(const std::string& name) {

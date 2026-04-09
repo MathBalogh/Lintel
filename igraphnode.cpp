@@ -187,29 +187,30 @@ void IGraphNode::draw_hover_label(const PlotBounds& b,
     float   best_y = 0.f;
     bool    found = false;
 
-    for (const auto& [name, s] : series) {
-        if (!s.display || s.color.a < 0.01f || s.xs.empty()) continue;
+    // TODO: seems to break application
+    //for (const auto& [name, s] : series) {
+    //    if (!s.display || s.color.a < 0.01f || s.xs.empty()) continue;
 
-        // Binary search to the closest x in this series.
-        const auto it = std::lower_bound(s.xs.begin(), s.xs.end(), data_x);
-        for (auto candidate = it; candidate != s.xs.end()
-             && candidate != s.xs.begin() + 1; --candidate) {
-            const size_t idx = static_cast<size_t>(candidate - s.xs.begin());
-            if (idx >= s.ys.size()) continue;
+    //    // Binary search to the closest x in this series.
+    //    const auto it = std::lower_bound(s.xs.begin(), s.xs.end(), data_x);
+    //    for (auto candidate = it; candidate != s.xs.end()
+    //         && candidate != s.xs.begin() + 1; --candidate) {
+    //        const size_t idx = static_cast<size_t>(candidate - s.xs.begin());
+    //        if (idx >= s.ys.size()) continue;
 
-            // Normalise distance in pixel space so both axes are comparable.
-            const float dx = map_to_px(s.xs[idx], b.xl, b.xh, 0.f, pw) -
-                map_to_px(data_x, b.xl, b.xh, 0.f, pw);
-            const float dy = map_to_px(s.ys[idx], b.yl, b.yh, ph, 0.f) -
-                map_to_px(data_y, b.yl, b.yh, ph, 0.f);
-            const float d2 = dx * dx + dy * dy;
-            if (d2 < best_dist_sq) {
-                best_dist_sq = d2;
-                best_y = s.ys[idx];
-                found = true;
-            }
-        }
-    }
+    //        // Normalise distance in pixel space so both axes are comparable.
+    //        const float dx = map_to_px(s.xs[idx], b.xl, b.xh, 0.f, pw) -
+    //            map_to_px(data_x, b.xl, b.xh, 0.f, pw);
+    //        const float dy = map_to_px(s.ys[idx], b.yl, b.yh, ph, 0.f) -
+    //            map_to_px(data_y, b.yl, b.yh, ph, 0.f);
+    //        const float d2 = dx * dx + dy * dy;
+    //        if (d2 < best_dist_sq) {
+    //            best_dist_sq = d2;
+    //            best_y = s.ys[idx];
+    //            found = true;
+    //        }
+    //    }
+    //}
 
     if (!found) return;
 

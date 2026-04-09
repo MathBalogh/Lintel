@@ -1,11 +1,19 @@
 
 root:
 	background-color = #000000
-	align-items = center
-	justify = center
 	
-	text as x:
-		content = "a"
-
-	text as y:
-		content = "b"
+	text:
+		content = "abc213"
+		height = 100
+		share = 1
+		text-align = left
+	text:
+		content = "abc213"
+		height = 100
+		share = 1
+		text-align = center
+	text:
+		content = "abc213"
+		height = 100
+		share = 1
+		text-align = right

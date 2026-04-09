@@ -574,7 +574,7 @@ TextNode& TextNode::clear_content() { return content(L""); }
 std::wstring& TextNode::content() { return handle<ITextNode>()->content; }
 
 TextNode& TextNode::text_align(TextAlign a) {
-    SELF.props.set(Key::TextAlign, static_cast<float>(static_cast<int>(a)));
+    SELF.apply(Key::TextAlign, a);
     SELF.invalidate_format();
     return *this;
 }

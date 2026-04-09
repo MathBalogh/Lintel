@@ -38,6 +38,34 @@ void Canvas::fill_ellipse(float cx, float cy, float rx, float ry, Color c) {
     dc()->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), rx, ry), brush.Get());
 }
 
+void Canvas::fill_triangle(float x0, float y0,
+                           float x1, float y1,
+                           float x2, float y2,
+                           Color c) {
+    auto brush = make_brush(c);
+    if (!brush) return;
+
+    ComPtr<ID2D1PathGeometry> geo;
+    GPU.d2d_factory->CreatePathGeometry(&geo);
+
+    ComPtr<ID2D1GeometrySink> sink;
+    geo->Open(&sink);
+
+    sink->BeginFigure(D2D1::Point2F(x0, y0), D2D1_FIGURE_BEGIN_FILLED);
+    sink->AddLine(D2D1::Point2F(x1, y1));
+    sink->AddLine(D2D1::Point2F(x2, y2));
+    sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+
+    sink->Close();
+
+    dc()->FillGeometry(geo.Get(), brush.Get());
+}
+
+void Canvas::fill_geometry(ComPtr<ID2D1PathGeometry>& geo, Color c) {
+    auto brush = make_brush(c);
+    dc()->FillGeometry(geo.Get(), brush.Get());
+}
+
 // ---------------------------------------------------------------------------
 // Stroked shapes
 // ---------------------------------------------------------------------------
@@ -58,6 +86,31 @@ void Canvas::draw_line(float x0, float y0, float x1, float y1, Color c, float wi
     if (!brush) return;
     dc()->DrawLine(D2D1::Point2F(x0, y0), D2D1::Point2F(x1, y1),
                    brush.Get(), width, style);
+}
+
+void Canvas::draw_triangle(float x0, float y0,
+                           float x1, float y1,
+                           float x2, float y2,
+                           Color c, float stroke_width) {
+    if (stroke_width <= 0.f) return;
+
+    auto brush = make_brush(c);
+    if (!brush) return;
+
+    ComPtr<ID2D1PathGeometry> geo;
+    GPU.d2d_factory->CreatePathGeometry(&geo);
+
+    ComPtr<ID2D1GeometrySink> sink;
+    geo->Open(&sink);
+
+    sink->BeginFigure(D2D1::Point2F(x0, y0), D2D1_FIGURE_BEGIN_HOLLOW);
+    sink->AddLine(D2D1::Point2F(x1, y1));
+    sink->AddLine(D2D1::Point2F(x2, y2));
+    sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+
+    sink->Close();
+
+    dc()->DrawGeometry(geo.Get(), brush.Get(), stroke_width);
 }
 
 // ---------------------------------------------------------------------------

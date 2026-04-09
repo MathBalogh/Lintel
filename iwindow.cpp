@@ -169,7 +169,8 @@ int Window::run(std::function<void()> fn) {
 }
 
 /*static*/ Window& Window::get() {
-    return View<Window>(this_win).as();
+    static View<Window> handle(this_win);
+    return handle.as();
 }
 
 } // namespace lintel

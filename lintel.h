@@ -158,6 +158,7 @@ struct Key {
             TextColor,
         __hot_colors_end,
         __cold_properties_begin,
+            Content,
             FontSize,
             FontFamily,
             Bold,
@@ -403,6 +404,10 @@ public:
 };
 using NodeView = View<Node>;
 
+class Geometry : public Owner<class IGeometry> {
+public:
+    Geometry(const std::vector<float>& points);
+};
 class CanvasNode : public Node {
 public:
     CanvasNode();
@@ -411,6 +416,13 @@ public:
     void rect(float x, float y, float w, float h, float r = 0.0f);
     void ellipse(float cx, float cy, float rx, float ry);
     void line(float x0, float y0, float x1, float y1, float w = 1.0f);
+    void triangle(float x0, float y0, float x1, float y1, float x2, float y2);
+    void geometry(Geometry&);
+
+    void on_draw(std::function<void(CanvasNode&)>);
+
+    float get_width() const;
+    float get_height() const;
 };
 class ImageNode : public Node {
 public:

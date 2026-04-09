@@ -145,32 +145,31 @@ class Parser {
         // Syntax:
         //   tag [args…] [as <id>] :    ← full form with block
         //   tag [args…] [as <id>]      ← shorthand, empty props
+        //   tag[(arg, …)] [as <id>] [:]   ← new syntax (args now parenthesized and comma-separated)
         //
-        // 'as <id>' explicitly names this instance for later lookup.
-        // Template args are any value tokens that appear before 'as' / ':' / newline.
+        // 'as <id>' explicitly names this instance for later lookup (the identifier
+        // may be a template parameter name; it is resolved dynamically at build time).
         Token tag_t = lexer_.pop();
         std::string tag(lexer_.slice(tag_t));
-
-        // Collect positional arguments: value tokens up to 'as', ':', or line end.
-        auto is_arg_end = [this] {
-            switch (lexer_.peek().kind) {
-                case TokenKind::KwAs:
-                case TokenKind::Colon:
-                case TokenKind::Newline:
-                case TokenKind::Indent:
-                case TokenKind::Dedent:
-                case TokenKind::EndOfFile:
-                    return true;
-                default:
-                    return false;
-            }
-        };
-
+        // New syntax: optional parenthesized, comma-separated argument list.
+        // Non-template nodes simply omit the parentheses (args stay empty).
         std::vector<Node*> args;
-        while (!is_arg_end()) {
-            Node* a = parse_expr();
-            if (!a) break;
-            args.push_back(a);
+        if (lexer_.peek().kind == TokenKind::LParen) {
+            lexer_.pop(); // consume '('
+            while (lexer_.peek().kind != TokenKind::RParen &&
+                   lexer_.peek().kind != TokenKind::EndOfFile) {
+                Node * a = parse_expr();
+                if (a) {
+                    args.push_back(a);
+                }
+                else {
+                    break;
+                }
+                if (!lexer_.match(TokenKind::Comma)) {
+                    break;
+                }
+            }
+            lexer_.expect(TokenKind::RParen, "')' closing template arguments");
         }
 
         // Optional instance identifier:  as myRef

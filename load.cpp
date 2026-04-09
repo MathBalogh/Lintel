@@ -52,27 +52,27 @@ static lintel::Property try_parse_enum(std::string_view prop_key, const std::str
     if (k.index == lintel::Key::Null) return {};
 
     if (k == lintel::Key::Direction) {
-        if (value_name == "row")    return lintel::Property(static_cast<unsigned int>(lintel::Direction::DirectionRow));
-        if (value_name == "column") return lintel::Property(static_cast<unsigned int>(lintel::Direction::DirectionCol));
+        if (value_name == "row")    return lintel::Property(DirectionRow);
+        if (value_name == "column") return lintel::Property(DirectionCol);
     }
     else if (k == lintel::Key::AlignItems) {
-        if (value_name == "start")   return lintel::Property(static_cast<unsigned int>(lintel::Align::AlignStart));
-        if (value_name == "center")  return lintel::Property(static_cast<unsigned int>(lintel::Align::AlignCenter));
-        if (value_name == "end")     return lintel::Property(static_cast<unsigned int>(lintel::Align::AlignEnd));
-        if (value_name == "stretch") return lintel::Property(static_cast<unsigned int>(lintel::Align::AlignStretch));
+        if (value_name == "start")   return lintel::Property(AlignStart);
+        if (value_name == "center")  return lintel::Property(AlignCenter);
+        if (value_name == "end")     return lintel::Property(AlignEnd);
+        if (value_name == "stretch") return lintel::Property(AlignStretch);
     }
     else if (k == lintel::Key::JustifyItems) {
-        if (value_name == "start")          return lintel::Property(static_cast<unsigned int>(lintel::Justify::JustifyStart));
-        if (value_name == "center")         return lintel::Property(static_cast<unsigned int>(lintel::Justify::JustifyCenter));
-        if (value_name == "end")            return lintel::Property(static_cast<unsigned int>(lintel::Justify::JustifyEnd));
-        if (value_name == "space-between")  return lintel::Property(static_cast<unsigned int>(lintel::Justify::JustifySpaceBetween));
-        if (value_name == "space-around")   return lintel::Property(static_cast<unsigned int>(lintel::Justify::JustifySpaceAround));
+        if (value_name == "start")          return lintel::Property(JustifyStart);
+        if (value_name == "center")         return lintel::Property(JustifyCenter);
+        if (value_name == "end")            return lintel::Property(JustifyEnd);
+        if (value_name == "space-between")  return lintel::Property(JustifySpaceBetween);
+        if (value_name == "space-around")   return lintel::Property(JustifySpaceAround);
     }
     else if (k == lintel::Key::TextAlign) {
-        if (value_name == "left")     return lintel::Property(static_cast<unsigned int>(lintel::TextAlign::TextAlignLeft));
-        if (value_name == "center")   return lintel::Property(static_cast<unsigned int>(lintel::TextAlign::TextAlignCenter));
-        if (value_name == "right")    return lintel::Property(static_cast<unsigned int>(lintel::TextAlign::TextAlignRight));
-        if (value_name == "justify")  return lintel::Property(static_cast<unsigned int>(lintel::TextAlign::TextAlignJustify));
+        if (value_name == "left")     return lintel::Property(TextAlignLeft);
+        if (value_name == "center")   return lintel::Property(TextAlignCenter);
+        if (value_name == "right")    return lintel::Property(TextAlignRight);
+        if (value_name == "justify")  return lintel::Property(TextAlignJustify);
     }
 
     return {};
@@ -265,7 +265,7 @@ class TreeBuilder {
     const std::unordered_map<std::string, const Node*>& templates_;
 
     void build(lintel::Node& parent, const NodeDecl& decl,
-               const InheritedProps& inherited) {
+               const InheritedProps& inherited, TemplateArgs targs = {}) {
 
         const TemplateDecl* tmpl = nullptr;
         {
@@ -275,11 +275,10 @@ class TreeBuilder {
             }
         }
 
-        // ── Build template-argument bindings ─────────────────────────────────
-        // Map each declared parameter name to the caller-supplied value node.
-        // Extra args are ignored; missing args leave the parameter unbound
-        // (resolves to identifier string, same as before the feature existed).
-        TemplateArgs targs;
+        // Build (or inherit) template-argument bindings.
+        // Top-level call starts with empty targs; nested calls receive the
+        // enclosing template's targs so that parameters like "lbl" and "val_id"
+        // remain visible inside child NodeDecls (e.g. the inner "text" nodes).
         if (tmpl && !tmpl->params.empty()) {
             for (size_t i = 0; i < tmpl->params.size() && i < decl.args.size(); ++i)
                 targs[tmpl->params[i]] = decl.args[i];
@@ -367,12 +366,20 @@ class TreeBuilder {
         // 6. Recurse into nested NodeDecls (template children first, then local)
         for (Node* child : effective_props) {
             if (!child || child->kind != NodeKind::NodeDecl) continue;
-            build(n, child->as<NodeDecl>(), child_inh);
+            build(n, child->as<NodeDecl>(), child_inh, targs);
         }
 
         // 7. Register named nodes for cross-reference via find().
-        if (!decl.id.empty())
-            sheet_.register_node(decl.id, NodeView(n.handle()));
+        if (!decl.id.empty()) {
+            std::string node_id = decl.id;
+            auto it = targs.find(decl.id);
+            if (it != targs.end()) {
+                // "as val_id" inside a template now resolves to the string value
+                // supplied by the caller for the parameter "val_id".
+                node_id = res_.resolve_str(it->second);
+            }
+            sheet_.register_node(node_id, NodeView(n.handle()));
+        }
     }
 
 public:
@@ -395,11 +402,11 @@ public:
                 }
                 for (Node* child : decl.props) {
                     if (!child || child->kind != NodeKind::NodeDecl) continue;
-                    build(root, child->as<NodeDecl>(), blank);
+                    build(root, child->as<NodeDecl>(), blank); // default empty targs
                 }
             }
             else {
-                build(root, decl, blank);
+                build(root, decl, blank); // default empty targs
             }
         }
     }

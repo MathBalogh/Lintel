@@ -21,6 +21,14 @@ public:
     // Fill an axis-aligned ellipse whose centre is (cx, cy).
     void fill_ellipse(float cx, float cy, float rx, float ry, Color c);
 
+    // Fill triangle
+    void fill_triangle(float x0, float y0,
+                       float x1, float y1,
+                       float x2, float y2,
+                       Color c);
+
+    void fill_geometry(ComPtr<ID2D1PathGeometry>& geo, Color c);
+
     // -- Stroked shapes ------------------------------------------------------
 
     // Draw a rectangle outline.  stroke_width > 0 required.
@@ -32,6 +40,12 @@ public:
     void draw_line(float x0, float y0, float x1, float y1,
                    Color c, float width,
                    ID2D1StrokeStyle* style = nullptr);
+
+    // Draw triangle outline
+    void draw_triangle(float x0, float y0,
+                       float x1, float y1,
+                       float x2, float y2,
+                       Color c, float stroke_width);
 
     // -- Text ----------------------------------------------------------------
 

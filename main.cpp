@@ -10,8 +10,5 @@ int main() {
     auto [node, sheet] = load("./test.ltl");
     win.root() = std::move(node);
 
-    View<TextNode> x, y;
-    sheet.find({ {x, "x"}, {y, "y"}});
-
     return win.run();
 }

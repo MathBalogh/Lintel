@@ -170,9 +170,6 @@
     <ClInclude Include="inode.h">
       <Filter>lib\nodes</Filter>
     </ClInclude>
-    <ClInclude Include="igeometry.h">
-      <Filter>lib\nodes\canvas</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="language.md">

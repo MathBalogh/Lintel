@@ -8,7 +8,7 @@ Canvas& Canvas::get() {
 }
 
 // ---------------------------------------------------------------------------
-// Private geometry converters
+// Private geometry converters (unchanged)
 // ---------------------------------------------------------------------------
 
 D2D1_RECT_F Canvas::to_d2df(const Rect& r) noexcept {
@@ -20,30 +20,41 @@ D2D1_ROUNDED_RECT Canvas::to_d2d_rr(const Rect& r, float radius) noexcept {
 }
 
 // ---------------------------------------------------------------------------
-// Filled shapes
+// Filled shapes (Brush core + Color convenience)
 // ---------------------------------------------------------------------------
 
 void Canvas::fill_rect(const Rect& r, Color c, float corner_radius) {
     auto brush = make_brush(c);
-    if (!brush) return;
+    if (brush) fill_rect(r, brush.Get(), corner_radius);
+}
+
+void Canvas::fill_rect(const Rect& r, ID2D1Brush* brush, float corner_radius) {
+    if (!brush || !dc()) return;
     if (corner_radius > 0.f)
-        dc()->FillRoundedRectangle(to_d2d_rr(r, corner_radius), brush.Get());
+        dc()->FillRoundedRectangle(to_d2d_rr(r, corner_radius), brush);
     else
-        dc()->FillRectangle(to_d2df(r), brush.Get());
+        dc()->FillRectangle(to_d2df(r), brush);
 }
 
 void Canvas::fill_ellipse(float cx, float cy, float rx, float ry, Color c) {
     auto brush = make_brush(c);
-    if (!brush) return;
-    dc()->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), rx, ry), brush.Get());
+    if (brush) fill_ellipse(cx, cy, rx, ry, brush.Get());
 }
 
-void Canvas::fill_triangle(float x0, float y0,
-                           float x1, float y1,
-                           float x2, float y2,
-                           Color c) {
+void Canvas::fill_ellipse(float cx, float cy, float rx, float ry, ID2D1Brush* brush) {
+    if (!brush || !dc()) return;
+    dc()->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), rx, ry), brush);
+}
+
+void Canvas::fill_triangle(float x0, float y0, float x1, float y1,
+                           float x2, float y2, Color c) {
     auto brush = make_brush(c);
-    if (!brush) return;
+    if (brush) fill_triangle(x0, y0, x1, y1, x2, y2, brush.Get());
+}
+
+void Canvas::fill_triangle(float x0, float y0, float x1, float y1,
+                           float x2, float y2, ID2D1Brush* brush) {
+    if (!brush || !dc()) return;
 
     ComPtr<ID2D1PathGeometry> geo;
     GPU.d2d_factory->CreatePathGeometry(&geo);
@@ -58,12 +69,17 @@ void Canvas::fill_triangle(float x0, float y0,
 
     sink->Close();
 
-    dc()->FillGeometry(geo.Get(), brush.Get());
+    dc()->FillGeometry(geo.Get(), brush);
 }
 
 void Canvas::fill_geometry(ComPtr<ID2D1PathGeometry>& geo, Color c) {
     auto brush = make_brush(c);
-    dc()->FillGeometry(geo.Get(), brush.Get());
+    if (brush) fill_geometry(geo, brush.Get());
+}
+
+void Canvas::fill_geometry(ComPtr<ID2D1PathGeometry>& geo, ID2D1Brush* brush) {
+    if (!geo || !brush || !dc()) return;
+    dc()->FillGeometry(geo.Get(), brush);
 }
 
 // ---------------------------------------------------------------------------
@@ -73,29 +89,40 @@ void Canvas::fill_geometry(ComPtr<ID2D1PathGeometry>& geo, Color c) {
 void Canvas::stroke_rect(const Rect& r, Color c, float stroke_width, float corner_radius) {
     if (stroke_width <= 0.f) return;
     auto brush = make_brush(c);
-    if (!brush) return;
+    if (brush) stroke_rect(r, brush.Get(), stroke_width, corner_radius);
+}
+
+void Canvas::stroke_rect(const Rect& r, ID2D1Brush* brush, float stroke_width, float corner_radius) {
+    if (stroke_width <= 0.f || !brush || !dc()) return;
     if (corner_radius > 0.f)
-        dc()->DrawRoundedRectangle(to_d2d_rr(r, corner_radius),
-                                   brush.Get(), stroke_width);
+        dc()->DrawRoundedRectangle(to_d2d_rr(r, corner_radius), brush, stroke_width);
     else
-        dc()->DrawRectangle(to_d2df(r), brush.Get(), stroke_width);
+        dc()->DrawRectangle(to_d2df(r), brush, stroke_width);
 }
 
-void Canvas::draw_line(float x0, float y0, float x1, float y1, Color c, float width, ID2D1StrokeStyle* style) {
+void Canvas::draw_line(float x0, float y0, float x1, float y1,
+                       Color c, float width, ID2D1StrokeStyle* style) {
     auto brush = make_brush(c);
-    if (!brush) return;
+    if (brush) draw_line(x0, y0, x1, y1, brush.Get(), width, style);
+}
+
+void Canvas::draw_line(float x0, float y0, float x1, float y1,
+                       ID2D1Brush* brush, float width, ID2D1StrokeStyle* style) {
+    if (!brush || !dc()) return;
     dc()->DrawLine(D2D1::Point2F(x0, y0), D2D1::Point2F(x1, y1),
-                   brush.Get(), width, style);
+                   brush, width, style);
 }
 
-void Canvas::draw_triangle(float x0, float y0,
-                           float x1, float y1,
-                           float x2, float y2,
-                           Color c, float stroke_width) {
+void Canvas::draw_triangle(float x0, float y0, float x1, float y1,
+                           float x2, float y2, Color c, float stroke_width) {
     if (stroke_width <= 0.f) return;
-
     auto brush = make_brush(c);
-    if (!brush) return;
+    if (brush) draw_triangle(x0, y0, x1, y1, x2, y2, brush.Get(), stroke_width);
+}
+
+void Canvas::draw_triangle(float x0, float y0, float x1, float y1,
+                           float x2, float y2, ID2D1Brush* brush, float stroke_width) {
+    if (stroke_width <= 0.f || !brush || !dc()) return;
 
     ComPtr<ID2D1PathGeometry> geo;
     GPU.d2d_factory->CreatePathGeometry(&geo);
@@ -110,11 +137,23 @@ void Canvas::draw_triangle(float x0, float y0,
 
     sink->Close();
 
-    dc()->DrawGeometry(geo.Get(), brush.Get(), stroke_width);
+    dc()->DrawGeometry(geo.Get(), brush, stroke_width);
+}
+
+void Canvas::stroke_geometry(ComPtr<ID2D1PathGeometry>& geo, Color c,
+                             float stroke_width, ID2D1StrokeStyle* style) {
+    auto brush = make_brush(c);
+    if (brush) stroke_geometry(geo, brush.Get(), stroke_width, style);
+}
+
+void Canvas::stroke_geometry(ComPtr<ID2D1PathGeometry>& geo, ID2D1Brush* brush,
+                             float stroke_width, ID2D1StrokeStyle* style) {
+    if (!geo || !brush || stroke_width <= 0.f || !dc()) return;
+    dc()->DrawGeometry(geo.Get(), brush, stroke_width, style);
 }
 
 // ---------------------------------------------------------------------------
-// Text
+// Text (unchanged)
 // ---------------------------------------------------------------------------
 
 void Canvas::draw_text(std::wstring_view text, IDWriteTextFormat* fmt,
@@ -122,14 +161,15 @@ void Canvas::draw_text(std::wstring_view text, IDWriteTextFormat* fmt,
     if (text.empty() || !fmt) return;
     auto brush = make_brush(c);
     if (!brush) return;
-    dc()->DrawText(text.data(), static_cast<UINT32>(text.size()), fmt, to_d2df(layout_box), brush.Get());
+    dc()->DrawText(text.data(), static_cast<UINT32>(text.size()), fmt,
+                   to_d2df(layout_box), brush.Get());
 }
 
 // ---------------------------------------------------------------------------
-// WIC
+// Images, Clipping (unchanged)
 // ---------------------------------------------------------------------------
 
-ComPtr<ID2D1Bitmap> Canvas::load_bitmap(std::string_view path) const {
+ComPtr<ID2D1Bitmap> Canvas::load_bitmap(std::string_view path) const { /* unchanged */
     if (path.empty()) return {};
 
     std::wstring wpath(path.begin(), path.end());
@@ -157,29 +197,132 @@ ComPtr<ID2D1Bitmap> Canvas::load_bitmap(std::string_view path) const {
     return bmp;
 }
 
-void Canvas::draw_image(ID2D1Bitmap* bmp, const Rect& dest_rect) {
+void Canvas::draw_image(ID2D1Bitmap* bmp, const Rect& dest_rect) { /* unchanged */
     if (!bmp) return;
     dc()->DrawBitmap(bmp, to_d2df(dest_rect), 1.0f, D2D1_INTERPOLATION_MODE_LINEAR);
 }
 
-
-// ---------------------------------------------------------------------------
-// Clipping
-// ---------------------------------------------------------------------------
-
-void Canvas::push_clip(const Rect& r) {
+void Canvas::push_clip(const Rect& r) { /* unchanged */
     dc()->PushAxisAlignedClip(to_d2df(r), D2D1_ANTIALIAS_MODE_ALIASED);
 }
 
-void Canvas::pop_clip() {
+void Canvas::pop_clip() { /* unchanged */
     dc()->PopAxisAlignedClip();
+}
+
+// ---------------------------------------------------------------------------
+// Transforms
+// ---------------------------------------------------------------------------
+
+void Canvas::push_transform(const D2D1_MATRIX_3X2_F& additional) {
+    if (!dc()) return;
+    D2D1_MATRIX_3X2_F current;
+    dc()->GetTransform(&current);
+    m_transformStack.push_back(current);
+
+    // Local transform semantics: new = current * additional
+    D2D1_MATRIX_3X2_F combined = current * additional;
+    dc()->SetTransform(combined);
+}
+
+void Canvas::pop_transform() {
+    if (!dc() || m_transformStack.empty()) return;
+    dc()->SetTransform(m_transformStack.back());
+    m_transformStack.pop_back();
+}
+
+D2D1_MATRIX_3X2_F Canvas::get_transform() const noexcept {
+    D2D1_MATRIX_3X2_F m = D2D1::Matrix3x2F::Identity();
+    if (dc()) dc()->GetTransform(&m);
+    return m;
+}
+
+void Canvas::set_transform(const D2D1_MATRIX_3X2_F& transform) {
+    if (dc()) dc()->SetTransform(transform);
+}
+
+void Canvas::translate(float dx, float dy) {
+    if (!dc()) return;
+    auto current = get_transform();
+    auto t = D2D1::Matrix3x2F::Translation(dx, dy);
+    set_transform(current * t);
+}
+
+void Canvas::rotate(float angle_degrees, float cx, float cy) {
+    if (!dc()) return;
+    auto current = get_transform();
+    auto r = D2D1::Matrix3x2F::Rotation(angle_degrees, D2D1::Point2F(cx, cy));
+    set_transform(current * r);
+}
+
+void Canvas::scale(float sx, float sy) {
+    if (!dc()) return;
+    auto current = get_transform();
+    auto s = D2D1::Matrix3x2F::Scale(sx, sy);
+    set_transform(current * s);
+}
+
+// ---------------------------------------------------------------------------
+// Gradients (different-colored vertices via stops)
+// ---------------------------------------------------------------------------
+
+ComPtr<ID2D1GradientStopCollection> Canvas::make_gradient_stops(
+    const std::vector<GradientStop>& stops,
+    D2D1_GAMMA gamma,
+    D2D1_EXTEND_MODE extendMode) const {
+
+    if (stops.empty() || !GPU.d2d_factory) return {};
+
+    std::vector<D2D1_GRADIENT_STOP> d2dStops(stops.size());
+    for (size_t i = 0; i < stops.size(); ++i) {
+        d2dStops[i].position = stops[i].offset;
+        d2dStops[i].color = D2D1::ColorF(
+            stops[i].color.r, stops[i].color.g,
+            stops[i].color.b, stops[i].color.a);
+    }
+
+    ComPtr<ID2D1GradientStopCollection> collection;
+    GPU.d2d_context->CreateGradientStopCollection(
+        d2dStops.data(), static_cast<UINT32>(d2dStops.size()),
+        gamma, extendMode, &collection);
+    return collection;
+}
+
+ComPtr<ID2D1LinearGradientBrush> Canvas::make_linear_gradient_brush(
+    const D2D1_POINT_2F& startPoint,
+    const D2D1_POINT_2F& endPoint,
+    ID2D1GradientStopCollection* stops) const {
+
+    if (!stops || !dc()) return {};
+    ComPtr<ID2D1LinearGradientBrush> brush;
+    dc()->CreateLinearGradientBrush(
+        D2D1::LinearGradientBrushProperties(startPoint, endPoint),
+        D2D1::BrushProperties(),
+        stops, &brush);
+    return brush;
+}
+
+ComPtr<ID2D1RadialGradientBrush> Canvas::make_radial_gradient_brush(
+    const D2D1_POINT_2F& center,
+    float radiusX,
+    float radiusY,
+    const D2D1_POINT_2F& gradientOriginOffset,
+    ID2D1GradientStopCollection* stops) const {
+
+    if (!stops || !dc()) return {};
+    ComPtr<ID2D1RadialGradientBrush> brush;
+    dc()->CreateRadialGradientBrush(
+        D2D1::RadialGradientBrushProperties(center, gradientOriginOffset, radiusX, radiusY),
+        D2D1::BrushProperties(),
+        stops, &brush);
+    return brush;
 }
 
 // ---------------------------------------------------------------------------
 // Factories
 // ---------------------------------------------------------------------------
 
-ComPtr<ID2D1SolidColorBrush> Canvas::make_brush(Color c) const {
+ComPtr<ID2D1SolidColorBrush> Canvas::make_brush(Color c) const { /* unchanged */
     ComPtr<ID2D1SolidColorBrush> b;
     if (dc())
         dc()->CreateSolidColorBrush(D2D1::ColorF(c.r, c.g, c.b, c.a), &b);
@@ -187,7 +330,7 @@ ComPtr<ID2D1SolidColorBrush> Canvas::make_brush(Color c) const {
 }
 
 ComPtr<ID2D1StrokeStyle> Canvas::make_stroke_style(
-    const D2D1_STROKE_STYLE_PROPERTIES& props) const {
+    const D2D1_STROKE_STYLE_PROPERTIES& props) const { /* unchanged */
     ComPtr<ID2D1StrokeStyle> style;
     if (GPU.d2d_factory)
         GPU.d2d_factory->CreateStrokeStyle(props, nullptr, 0, &style);
@@ -196,7 +339,7 @@ ComPtr<ID2D1StrokeStyle> Canvas::make_stroke_style(
 
 ComPtr<IDWriteTextFormat> Canvas::make_text_format(
     const wchar_t* family, float size,
-    bool bold, bool italic, bool word_wrap) const {
+    bool bold, bool italic, bool word_wrap) const { /* unchanged */
     if (!GPU.dwrite_factory) return {};
 
     ComPtr<IDWriteTextFormat> fmt;
@@ -215,7 +358,7 @@ ComPtr<IDWriteTextFormat> Canvas::make_text_format(
 
 ComPtr<IDWriteTextLayout> Canvas::make_text_layout(
     const wchar_t* text, uint32_t len,
-    IDWriteTextFormat* fmt, float max_w, float max_h) const {
+    IDWriteTextFormat* fmt, float max_w, float max_h) const { /* unchanged */
     if (!GPU.dwrite_factory || !fmt || len == 0) return {};
 
     ComPtr<IDWriteTextLayout> layout;

@@ -156,7 +156,6 @@
     <ClInclude Include="gpu.h" />
     <ClInclude Include="handle.h" />
     <ClInclude Include="icanvasnode.h" />
-    <ClInclude Include="igeometry.h" />
     <ClInclude Include="igraphnode.h" />
     <ClInclude Include="ihistogramnode.h" />
     <ClInclude Include="iimagenode.h" />

@@ -406,11 +406,29 @@ using NodeView = View<Node>;
 
 class Geometry : public Owner<class IGeometry> {
 public:
-    Geometry(const std::vector<float>& points);
+    Geometry();
+    ~Geometry();
+
+    Geometry(Geometry&&) noexcept;
+    Geometry& operator=(Geometry&&) noexcept;
+};
+class GeometryBuilder : public Owner<class IGeometryBuilder> {
+public:
+    GeometryBuilder();
+    ~GeometryBuilder();
+
+    void begin_figure(float x, float y);
+    void add_line(float x, float y);
+    void add_bezier(float x0, float y0, float x1, float y1, float x2, float y2);
+    void add_quadratic_bezier(float x0, float y0, float x1, float y1);
+    void add_arc(float x, float y, float size_x, float size_y, float angle, bool sweep_clockwise = true);
+    Geometry end_figure();
 };
 class CanvasNode : public Node {
 public:
     CanvasNode();
+
+    void translate(float x, float y);
 
     void fill(Color c);
     void rect(float x, float y, float w, float h, float r = 0.0f);

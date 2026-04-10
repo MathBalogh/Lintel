@@ -429,6 +429,7 @@ public:
     CanvasNode();
 
     void translate(float x, float y);
+    void scale(float x, float y);
 
     void fill(Color c);
     void rect(float x, float y, float w, float h, float r = 0.0f);

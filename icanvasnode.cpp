@@ -82,6 +82,9 @@ CanvasNode::CanvasNode(): Node(nullptr) {
 void CanvasNode::translate(float x, float y) {
     CANVAS.translate(x, y);
 }
+void CanvasNode::scale(float x, float y) {
+    CANVAS.scale(x, y);
+}
 
 void CanvasNode::fill(Color c) {
     SELF->current_fill = c;
@@ -105,13 +108,33 @@ void CanvasNode::geometry(Geometry& geo) {
 void ICanvasNode::draw(Node& self, Canvas& canvas) {
     draw_default(canvas);
 
-    canvas.push_clip(rect);
-    canvas.push_transform(D2D1::IdentityMatrix());
-    canvas.translate(rect.x, rect.y);
-    if (on_draw)
+    if (on_draw) {
+        ComPtr<ID2D1CommandList> cmd;
+        GPU.d2d_context->CreateCommandList(&cmd);
+
+        ComPtr<ID2D1Image> target;
+        GPU.d2d_context->GetTarget(&target);
+        GPU.d2d_context->SetTarget(cmd.Get());
+
+        canvas.push_transform(D2D1::IdentityMatrix());
         on_draw(self.as<CanvasNode>());
-    canvas.pop_transform();
-    canvas.pop_clip();
+        canvas.pop_transform();
+
+        cmd->Close();
+
+        GPU.d2d_context->SetTarget(target.Get());
+
+        canvas.push_clip(rect);
+        canvas.push_transform(D2D1::Matrix3x2F::Translation(rect.x, rect.y));
+        GPU.d2d_context->DrawImage(
+            (ID2D1Image*) cmd.Get(),
+            D2D1::Point2F(0.0f, 0.0f),
+            D2D1_INTERPOLATION_MODE_LINEAR,
+            D2D1_COMPOSITE_MODE_SOURCE_OVER
+        );
+        canvas.pop_transform();
+        canvas.pop_clip();
+    }
 }
 void CanvasNode::on_draw(std::function<void(CanvasNode&)> fn) {
     SELF->on_draw = fn;

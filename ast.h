@@ -22,7 +22,7 @@ enum class TokenKind {
     Error,
     __LiteralsBegin,
     Identifier, // bare word or quoted-string content (without quotes)
-    Number,     // 1  3.14  1.0f
+    Number,     // 1  3.14  1.0f  100px  50%
     Boolean,    // true | false
     HexColor,   // #rrggbb[aa]
     __LiteralsEnd,
@@ -33,15 +33,15 @@ enum class TokenKind {
     KwAs,       // as  - names an instance: button #F00 as myBtn
     __KeywordsEnd,
     __PunctuatorsBegin,
-    Quote,      // kept in table for symmetry; lexer emits Identifier for "…"
+    Quote,      // kept in table for symmetry; lexer emits Identifier for "…"}
     Colon,
     Equals,
     LParen,     // '(' - template parameter list open
     RParen,     // ')' - template parameter list close
-    Comma,      // ',' - parameter separator
-    Newline,    // '\n' - logical-line terminator
-    Indent,     // synthetic - indentation level increased
-    Dedent,     // synthetic - indentation level decreased
+    Comma,      // ',' - parameter separator / list separator
+    LBrace,     // '{' - block open
+    RBrace,     // '}' - block close
+    Dot,        // '.' - dotted property path (main-text.content)
     __PunctuatorsEnd,
     __TokenEnd
 };
@@ -66,13 +66,13 @@ enum class NodeKind {
     HexExpr,   // hex colour   (#rrggbb)
     BoolExpr,  // true | false
     CallExpr,  // func(a, b, …) - reserved for future function-value support
-    ListExpr,  // space-separated value list  e.g. "4 8 4 8"
+    ListExpr,  // comma-separated value list  e.g. "4, 8, 4, 8"
 
     ApplyExpr, // apply <style-name>
 
     VarDecl,   // <ident> = <value>      (top-level binding)
     NodeDecl,  // <tag> [<n>] : <block>
-    PropDecl,  // <ident> = <value>      (inside NodeDecl / StyleDecl)
+    PropDecl,  // <ident> = <value>      (inside NodeDecl / StyleDecl / OnDecl - supports dotted paths)
     StyleDecl, // style <n> : <block>
     OnDecl,    // on <event> : <block>
     TemplateDecl, // template <n> : <block> (reusable node structure)
@@ -161,14 +161,14 @@ struct VarDecl : Node {
 struct NodeDecl : Node {
     std::string        tag;   // "node", "text", "graph", "root", or any registered type
     std::string        id;    // optional instance identifier:  button #F00 as myBtn
-    std::vector<Node*> args;  // positional template arguments: button #FF0000 #00FF00
+    std::vector<Node*> args;  // positional template arguments: button(#FF0000, #00FF00)
     std::vector<Node*> props; // PropDecl | NodeDecl | ApplyExpr | OnDecl
     explicit NodeDecl(std::string tag)
         : Node(NodeKind::NodeDecl), tag(std::move(tag)) {}
 };
 
 struct PropDecl : Node {
-    std::string property;
+    std::string property;     // supports dotted paths: "main-text.content"
     Node* value = nullptr;
     explicit PropDecl(std::string prop)
         : Node(NodeKind::PropDecl), property(std::move(prop)) {}
@@ -191,7 +191,7 @@ struct OnDecl : Node {
 struct TemplateDecl : Node {
     std::string              name;    // the template's own identifier
     std::string              base;    // base node type  (node / text / graph / …)
-    std::vector<std::string> params;  // parameter names declared in (…)
+    std::vector<std::string> params;  // parameter names declared in (… )
     std::vector<Node*>       props;
     explicit TemplateDecl(std::string n, std::string b)
         : Node(NodeKind::TemplateDecl), name(std::move(n)), base(std::move(b)) {}

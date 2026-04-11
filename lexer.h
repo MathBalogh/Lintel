@@ -25,10 +25,7 @@ class Lexer {
     char   ch()               const { return bounds() ? src_[cur_] : '\0'; }
     char   ch(uint32_t o)     const { return bounds(o) ? src_[cur_ + o] : '\0'; }
 
-    // ── Indent tracking ───────────────────────────────────────────────────────
-    std::vector<uint32_t> indent_stack_; // stack of column counts, base is 0
-    std::deque<Token>     pending_;      // synthetic INDENT/DEDENT tokens queued
-    // by handle_indent(), consumed by next()
+    // ── Lookahead buffer ──────────────────────────────────────────────────────
     std::deque<Token>     look_;         // peek() lookahead buffer
 
     // ── Token factory ─────────────────────────────────────────────────────────
@@ -38,8 +35,8 @@ class Lexer {
 
     // ── Internal scanners ─────────────────────────────────────────────────────
 
-    // Skip spaces/tabs and block comments on the current line.
-    // Does NOT consume '\n' - newlines are handled explicitly in next().
+    // Skip spaces/tabs and block/line comments on the current line.
+    // Does NOT consume '\n'.
     void skip_horiz() {
         while (true) {
             char c = ch();
@@ -48,7 +45,7 @@ class Lexer {
             if (c == '/' && ch(1) == '/') {
                 cur_ += 2;
                 while (ch() != '\n' && ch() != '\0') ++cur_;
-                return; // next char is '\n' or '\0'; let next() handle it
+                return; // next char is '\n' or '\0'; let skip_whitespace handle it
             }
             // block comment: may span lines - treated as transparent whitespace
             if (c == '/' && ch(1) == '*') {
@@ -63,10 +60,18 @@ class Lexer {
         }
     }
 
-    // Called immediately after consuming a '\n'.
-    // Skips blank / comment-only lines, then compares the new indentation level
-    // against the stack and pushes Indent / Dedent tokens into pending_.
-    void handle_indent();
+    // Skip all insignificant whitespace (spaces, tabs, newlines) and comments.
+    // Called before every token in the new brace-based syntax.
+    void skip_whitespace() {
+        while (true) {
+            skip_horiz();
+            if (ch() == '\n') {
+                ++cur_;
+                continue;
+            }
+            break;
+        }
+    }
 
     Token number() {
         uint32_t b = cur_;
@@ -78,6 +83,15 @@ class Lexer {
             break;
         }
         if (ch() == 'f') ++cur_; // accept "1.0f" format
+
+        // UI units - prepare for production UIValue (pixels / percentage)
+        if (ch() == 'p' && ch(1) == 'x') {
+            cur_ += 2;
+        }
+        else if (ch() == '%') {
+            ++cur_;
+        }
+
         return make(TokenKind::Number, b, cur_);
     }
 
@@ -135,7 +149,6 @@ public:
     explicit Lexer(std::string_view src, AST& root)
         : src_(src), cur_(0), root_(root) {
         root_.source = src;
-        indent_stack_.push_back(0); // base indent level
     }
 
     // ── Error helpers ─────────────────────────────────────────────────────────

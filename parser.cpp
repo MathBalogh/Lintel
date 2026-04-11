@@ -11,37 +11,19 @@ class Parser {
     void error(const Token& at, std::string msg) { lexer_.error(at, std::move(msg)); }
     void unexpected(const Token& t, std::string_view ctx) { lexer_.unexpected_token_error(t, ctx); }
 
-    void skip_newlines() {
-        while (lexer_.peek().kind == TokenKind::Newline)
-            lexer_.pop();
-    }
-
-    // ── Block ────────────────────────────────────────────────────────────────
+    // ── Block (now brace-delimited - no whitespace/indent dependency) ────────
     std::vector<Node*> parse_block() {
-        if (!lexer_.match(TokenKind::Newline)) {
-            unexpected(lexer_.peek(), "expected newline before block");
-        }
-
-        if (!lexer_.match(TokenKind::Indent)) {
-            unexpected(lexer_.peek(), "expected indented block");
-            return {};
-        }
+        lexer_.expect(TokenKind::LBrace);
 
         std::vector<Node*> stmts;
-        while (lexer_.peek().kind != TokenKind::Dedent &&
+        while (lexer_.peek().kind != TokenKind::RBrace &&
                lexer_.peek().kind != TokenKind::EndOfFile) {
-
-            skip_newlines();
-
-            if (lexer_.peek().kind == TokenKind::Dedent ||
-                lexer_.peek().kind == TokenKind::EndOfFile)
-                break;
 
             if (Node* n = parse_inner_stmt())
                 stmts.push_back(n);
         }
 
-        lexer_.match(TokenKind::Dedent);
+        lexer_.expect(TokenKind::RBrace);
         return stmts;
     }
 
@@ -58,15 +40,33 @@ class Parser {
             if (sv == "on")
                 return parse_on_decl();
 
-            // NEW: properties use "ident = value" syntax.
-            // This check must come BEFORE the node-decl fallback
-            // so that "background-color = #000000" is parsed as PropDecl,
-            // not mistaken for a shorthand child node.
-            if (lexer_.peek(1).kind == TokenKind::Equals)
+            // Check whether this is a property assignment (possibly dotted: main-text.content = …)
+            // or a node declaration.  We peek ahead without consuming.
+            bool is_prop_assign = false;
+            size_t off = 1;
+            TokenKind nk = lexer_.peek(off).kind;
+            if (nk == TokenKind::Equals) {
+                is_prop_assign = true;
+            }
+            else if (nk == TokenKind::Dot) {
+                do {
+                    off++;  // skip Dot
+                    if (lexer_.peek(off).kind != TokenKind::Identifier) {
+                        break;
+                    }
+                    off++;  // skip Identifier after dot
+                    nk = lexer_.peek(off).kind;
+                } while (nk == TokenKind::Dot);
+
+                if (nk == TokenKind::Equals) {
+                    is_prop_assign = true;
+                }
+            }
+
+            if (is_prop_assign)
                 return parse_prop_decl();
 
-            // Otherwise: node declaration (full form "tag:" / "tag name:"
-            // or the new shorthand one-liner "tag" with empty props).
+            // Otherwise: node declaration (full form with optional args / as / block)
             return parse_node_decl();
         }
 
@@ -81,7 +81,6 @@ class Parser {
         lexer_.expect(TokenKind::Equals);
 
         Node* val = parse_value();
-        lexer_.match(TokenKind::Newline);
 
         auto* v = ast_.make<VarDecl>(std::string(lexer_.slice(name_t)));
         v->value = val;
@@ -93,7 +92,6 @@ class Parser {
     Node* parse_style_decl() {
         Token kw = lexer_.pop();
         Token name_t = lexer_.expect(TokenKind::Identifier, "style name");
-        lexer_.expect(TokenKind::Colon);
 
         auto* s = ast_.make<StyleDecl>(std::string(lexer_.slice(name_t)));
         s->range(kw);
@@ -103,9 +101,7 @@ class Parser {
     }
 
     Node* parse_template_decl() {
-        // Syntax:  template <name> <base> [( <param> , … )] :
-        //   template myBtn  node :
-        //   template myBtn  node (bg, border) :
+        // Syntax:  template <name> <base> [( <param> , … )] {
         Token kw = lexer_.pop();
         Token name_t = lexer_.expect(TokenKind::Identifier, "template name");
         Token base_t = lexer_.expect(TokenKind::Identifier, "base node type (node/text/graph/...)");
@@ -120,13 +116,10 @@ class Parser {
                     Token pt = lexer_.pop();
                     params.push_back(std::string(lexer_.slice(pt)));
                 }
-                // Skip commas between parameters.
                 lexer_.match(TokenKind::Comma);
             }
-            lexer_.expect(TokenKind::RParen, "')' closing template parameter list");
+            lexer_.expect(TokenKind::RParen);
         }
-
-        lexer_.expect(TokenKind::Colon);
 
         auto* t = ast_.make<TemplateDecl>(
             std::string(lexer_.slice(name_t)),
@@ -143,33 +136,22 @@ class Parser {
     // ── Node / On / Apply ────────────────────────────────────────────────────
     Node* parse_node_decl() {
         // Syntax:
-        //   tag [args…] [as <id>] :    ← full form with block
-        //   tag [args…] [as <id>]      ← shorthand, empty props
-        //   tag[(arg, …)] [as <id>] [:]   ← new syntax (args now parenthesized and comma-separated)
-        //
-        // 'as <id>' explicitly names this instance for later lookup (the identifier
-        // may be a template parameter name; it is resolved dynamically at build time).
+        //   tag [ (args…) ] [as <id>] {
         Token tag_t = lexer_.pop();
         std::string tag(lexer_.slice(tag_t));
-        // New syntax: optional parenthesized, comma-separated argument list.
-        // Non-template nodes simply omit the parentheses (args stay empty).
+
+        // Optional parenthesized, comma-separated argument list.
         std::vector<Node*> args;
         if (lexer_.peek().kind == TokenKind::LParen) {
             lexer_.pop(); // consume '('
             while (lexer_.peek().kind != TokenKind::RParen &&
                    lexer_.peek().kind != TokenKind::EndOfFile) {
-                Node * a = parse_expr();
-                if (a) {
-                    args.push_back(a);
-                }
-                else {
-                    break;
-                }
-                if (!lexer_.match(TokenKind::Comma)) {
-                    break;
-                }
+                Node* a = parse_expr();
+                if (a) args.push_back(a);
+                else break;
+                if (!lexer_.match(TokenKind::Comma)) break;
             }
-            lexer_.expect(TokenKind::RParen, "')' closing template arguments");
+            lexer_.expect(TokenKind::RParen);
         }
 
         // Optional instance identifier:  as myRef
@@ -180,16 +162,13 @@ class Parser {
             id = std::string(lexer_.slice(id_t));
         }
 
-        const bool has_colon = lexer_.match(TokenKind::Colon);
-
         auto* n = ast_.make<NodeDecl>(std::move(tag));
         n->id = std::move(id);
         n->args = std::move(args);
         n->range(tag_t);
 
-        if (has_colon)
-            n->props = parse_block();
-        // else: shorthand one-liner, props stay empty
+        // Block is now mandatory (brace syntax)
+        n->props = parse_block();
 
         return n;
     }
@@ -200,8 +179,6 @@ class Parser {
 
         if (event_t.kind != TokenKind::Identifier)
             unexpected(event_t, "event name");
-
-        lexer_.expect(TokenKind::Colon);
 
         auto* o = ast_.make<OnDecl>(std::string(lexer_.slice(event_t)));
         o->range(on_t);
@@ -217,8 +194,6 @@ class Parser {
         if (style_t.kind != TokenKind::Identifier)
             unexpected(style_t, "style name after 'apply'");
 
-        lexer_.match(TokenKind::Newline);
-
         auto* a = ast_.make<ApplyExpr>(std::string(lexer_.slice(style_t)));
         a->range(app);
         a->range(style_t);
@@ -226,13 +201,27 @@ class Parser {
     }
 
     Node* parse_prop_decl() {
+        // Property name (supports dotted paths for cross-node references: main-text.content)
+        std::string property;
         Token prop_t = lexer_.pop();
+        if (prop_t.kind != TokenKind::Identifier) {
+            unexpected(prop_t, "property name");
+            return nullptr;
+        }
+        property = std::string(lexer_.slice(prop_t));
+
+        while (lexer_.peek().kind == TokenKind::Dot) {
+            lexer_.pop(); // consume '.'
+            Token next_t = lexer_.expect(TokenKind::Identifier, "property name after '.'");
+            property += ".";
+            property += lexer_.slice(next_t);
+        }
+
         lexer_.expect(TokenKind::Equals);
 
         Node* val = parse_value();
-        lexer_.match(TokenKind::Newline);
 
-        auto* p = ast_.make<PropDecl>(std::string(lexer_.slice(prop_t)));
+        auto* p = ast_.make<PropDecl>(std::move(property));
         p->value = val;
         p->range(prop_t);
         if (val) p->range(val);
@@ -264,33 +253,24 @@ class Parser {
     }
 
     Node* parse_value() {
-        auto is_value_end = [this] {
-            switch (lexer_.peek().kind) {
-                case TokenKind::Newline:
-                case TokenKind::Indent:
-                case TokenKind::Dedent:
-                case TokenKind::EndOfFile:
-                    return true;
-                default:
-                    return false;
-            }
-        };
-
         Node* first = parse_expr();
-        if (!first || is_value_end())
+        if (!first) return nullptr;
+
+        // Support comma-separated lists for production UI values (e.g. padding = 4, 8, 4, 8)
+        // Single values remain the common case.
+        if (lexer_.peek().kind != TokenKind::Comma)
             return first;
 
         auto* lst = ast_.make<ListExpr>();
         lst->list.push_back(first);
         lst->range(first);
 
-        while (!is_value_end()) {
+        while (lexer_.match(TokenKind::Comma)) {
             Node* nxt = parse_expr();
             if (!nxt) break;
             lst->list.push_back(nxt);
             lst->range(nxt);
         }
-
         return lst;
     }
 
@@ -301,12 +281,7 @@ public:
     void parse() {
         ast_.allocate(4096);
 
-        skip_newlines();
-
         while (lexer_.peek().kind != TokenKind::EndOfFile) {
-            skip_newlines();
-            if (lexer_.peek().kind == TokenKind::EndOfFile) break;
-
             const Token& t = lexer_.peek();
 
             if (t.kind == TokenKind::KwStyle) {
@@ -318,14 +293,13 @@ public:
                 continue;
             }
 
-            // "root:" (or any tag) is now just a normal NodeDecl handled by parse_node_decl.
-            // Shorthand "button" (no colon) works here too.
             if (t.kind == TokenKind::Identifier) {
+                // Top-level variable binding vs node declaration
                 if (lexer_.peek(1).kind == TokenKind::Equals) {
                     ast_.nodes.push_back(parse_var_decl());
                     continue;
                 }
-                ast_.nodes.push_back(parse_node_decl()); // full or shorthand
+                ast_.nodes.push_back(parse_node_decl());
                 continue;
             }
 

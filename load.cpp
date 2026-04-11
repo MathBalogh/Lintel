@@ -16,19 +16,10 @@
 namespace lintel::parser {
 
 // ─── Helpers for new Property / UIValue / Enum system ────────────────────────
-//
-// After the property refactor, values must be turned into the exact
-// Property variant the target key expects (UIValue for dimensions/gap,
-// unsigned-int enum for Direction/AlignItems/etc.).  The DSL still uses
-// the old value syntax (NumExpr, IdentExpr, …) so we dispatch on the
-// property name string.
-
 static bool is_ui_value_key(std::string_view prop) {
     lintel::Key k = lintel::get_key(std::string(prop));
     if (k.index == lintel::Key::Null || !k.affects_layout()) return false;
 
-    // All layout keys except the three enums are UIValue (px by default,
-    // "auto" special-cased in Ident handling). Share stays float.
     switch (k.index) {
         case lintel::Key::Width:
         case lintel::Key::Height:
@@ -79,26 +70,14 @@ static lintel::Property try_parse_enum(std::string_view prop_key, const std::str
 }
 
 // ─── Template argument bindings ──────────────────────────────────────────────
-//
-// Maps parameter name → the caller-supplied AST value node.
-// Built by TreeBuilder::build when it detects a template instantiation with args.
-
 using TemplateArgs = std::unordered_map<std::string, const Node*>;
 
 // ─── AST value → PropValue (key-aware) ───────────────────────────────────────
-//
-// Now takes the property name so we can emit UIValue / enum Property variants.
-// Variable resolution still follows one level exactly as before.
-// `targs` carries template-parameter bindings for the current instantiation;
-// they shadow VarDecl lookups so that `background-color = bg` resolves `bg`
-// to the caller-supplied value rather than a global variable.
-
 static lintel::Property node_to_prop(std::string_view key, const Node* node,
                                      const StyleResolver& res,
                                      const TemplateArgs& targs = {}) {
     if (!node) return {};
 
-    // Ident that names a template parameter → substitute caller's value.
     if (node->kind == NodeKind::IdentExpr) {
         const std::string& name = node->as<IdentExpr>().name;
         auto it = targs.find(name);
@@ -106,7 +85,6 @@ static lintel::Property node_to_prop(std::string_view key, const Node* node,
             return node_to_prop(key, it->second, res, targs);
     }
 
-    // Ident that names a VarDecl → follow exactly one level (old behaviour).
     if (node->kind == NodeKind::IdentExpr) {
         const std::string& name = node->as<IdentExpr>().name;
         if (const Node* target = res.var(name))
@@ -132,22 +110,18 @@ static lintel::Property node_to_prop(std::string_view key, const Node* node,
         {
             const std::string& name = node->as<IdentExpr>().name;
 
-            // "auto" for any UIValue key
             if (name == "auto" && is_ui_value_key(key))
                 return lintel::Property(lintel::UIValue::make_auto());
 
-            // Enum literals (Direction, AlignItems, JustifyItems, TextAlign)
             lintel::Property enum_val = try_parse_enum(key, name);
             if (!enum_val.is_null())
                 return enum_val;
 
-            // ordinary identifier → wstring (font-family, style names, …)
             return lintel::Property(to_wstring(name));
         }
 
         case NodeKind::ListExpr:
         {
-            // space-joined string (unchanged from original)
             std::wostringstream oss;
             bool first = true;
             for (const Node* item : node->as<ListExpr>().list) {
@@ -160,7 +134,6 @@ static lintel::Property node_to_prop(std::string_view key, const Node* node,
         }
 
         case NodeKind::CallExpr:
-            // reserved for future function values (px(100), …); ignored for now
             return {};
 
         default:
@@ -169,7 +142,6 @@ static lintel::Property node_to_prop(std::string_view key, const Node* node,
 }
 
 // ─── Inherited properties ─────────────────────────────────────────────────────
-
 struct InheritedProps {
     std::optional<std::wstring> font_family;
     std::optional<float>        font_size;
@@ -185,11 +157,11 @@ static InheritedProps derive_inherited(const lintel::Node& n, const InheritedPro
     Properties& a = const_cast<lintel::Node&>(n)->props;
     if (auto* v = a.get_wstring(Key::FontFamily)) out.font_family = *v;
     if (auto v = a.get_color(Key::TextColor)) out.text_color = *v;
-    if (auto v = a.get(Key::FontSize))  out.font_size  = v;
-    if (auto v = a.get(Key::Bold))      out.bold       = v;
-    if (auto v = a.get(Key::Italic))    out.italic     = v;
-    if (auto v = a.get(Key::Wrap))      out.wrap       = v;
-    if (auto v = a.get(Key::Opacity))   out.opacity    = v;
+    if (auto v = a.get(Key::FontSize))  out.font_size = v;
+    if (auto v = a.get(Key::Bold))      out.bold = v;
+    if (auto v = a.get(Key::Italic))    out.italic = v;
+    if (auto v = a.get(Key::Wrap))      out.wrap = v;
+    if (auto v = a.get(Key::Opacity))   out.opacity = v;
     return out;
 }
 
@@ -204,8 +176,7 @@ static void apply_inherited(lintel::Node& n, const InheritedProps& inh) {
     if (inh.opacity && !a.has(Key::Opacity)) a.set(Key::Opacity, *inh.opacity);
 }
 
-// ─── AST → StyleSheet (pass 2) ────────────────────────────────────────────────
-
+// ─── AST → StyleSheet (pass 2) ─────────────────────────────────────────────
 static StyleSheet build_stylesheet(const AST& ast, const StyleResolver& res) {
     StyleSheet sheet;
 
@@ -258,7 +229,6 @@ static StyleSheet build_stylesheet(const AST& ast, const StyleResolver& res) {
 }
 
 // ─── TreeBuilder (pass 3) ─────────────────────────────────────────────────────
-
 class TreeBuilder {
     StyleSheet& sheet_;
     const StyleResolver& res_;
@@ -275,109 +245,71 @@ class TreeBuilder {
             }
         }
 
-        // Build (or inherit) template-argument bindings.
-        // Top-level call starts with empty targs; nested calls receive the
-        // enclosing template's targs so that parameters like "lbl" and "val_id"
-        // remain visible inside child NodeDecls (e.g. the inner "text" nodes).
         if (tmpl && !tmpl->params.empty()) {
             for (size_t i = 0; i < tmpl->params.size() && i < decl.args.size(); ++i)
                 targs[tmpl->params[i]] = decl.args[i];
-
-            if (decl.args.size() > tmpl->params.size()) {
-                std::cerr << "load: template '" << decl.tag << "' expects "
-                    << tmpl->params.size() << " argument(s), got "
-                    << decl.args.size() << " - extra args ignored\n";
-            }
-            if (decl.args.size() < tmpl->params.size()) {
-                std::cerr << "load: template '" << decl.tag << "' expects "
-                    << tmpl->params.size() << " argument(s), got "
-                    << decl.args.size() << " - unbound params keep their name\n";
-            }
         }
 
         lintel::Node node;
         if (tmpl) {
             node = create_node(tmpl->base);
-            if (!node) {
-                std::cerr << "load: unknown base node type '" << tmpl->base
-                    << "' for template '" << decl.tag << "' - skipped\n";
-                return;
-            }
+            if (!node) return;
         }
         else {
             node = create_node(decl.tag);
-            if (!node) {
-                std::cerr << "load: unknown node type '" << decl.tag << "' - skipped\n";
-                return;
-            }
+            if (!node) return;
         }
         lintel::Node& n = parent.push(node);
 
-        // 1. Seed with inherited values.
         apply_inherited(n, inherited);
 
-        // Build effective content list: template (defaults) + local decl (overrides/additions)
         std::vector<Node*> effective_props;
-        if (tmpl) {
-            effective_props = tmpl->props;
-        }
+        if (tmpl) effective_props = tmpl->props;
         effective_props.insert(effective_props.end(), decl.props.begin(), decl.props.end());
 
-        // 2. Applied styles (template first, then local)
         for (Node* child : effective_props) {
             if (!child || child->kind != NodeKind::ApplyExpr) continue;
             sheet_.apply(n, child->as<ApplyExpr>().style);
         }
 
-        // 3. Node-local properties (template first → local overrides)
         for (Node* child : effective_props) {
             if (!child || child->kind != NodeKind::PropDecl) continue;
             const PropDecl& pd = child->as<PropDecl>();
-            StyleSheet::dispatch_prop(n, pd.property,
-                                      node_to_prop(pd.property, pd.value, res_, targs));
+            sheet_.dispatch_prop(n, pd.property, node_to_prop(pd.property, pd.value, res_, targs));
         }
 
-        // 4. Node-local event handlers (both template and local are added)
         for (Node* child : effective_props) {
             if (!child || child->kind != NodeKind::OnDecl) continue;
             const OnDecl& od = child->as<OnDecl>();
             Event ev = get_event(od.event);
-            if (ev == Event::Null) {
-                std::cerr << "load: unknown event '" << od.event << "' - skipped\n";
-                continue;
-            }
+            if (ev == Event::Null) continue;
+
             auto props = std::make_shared<std::vector<StyleSheet::Prop>>();
             for (Node* dp : od.props) {
                 if (!dp || dp->kind != NodeKind::PropDecl) continue;
                 const PropDecl& pd = dp->as<PropDecl>();
-                // Event handlers capture targs by value so the closure is
-                // self-contained even after the instantiation scope ends.
                 props->push_back({ pd.property,
                     node_to_prop(pd.property, pd.value, res_, targs) });
             }
-            n.on(ev, [props] (NodeView self) {
-                StyleSheet::apply_props(self.as(), *props);
+
+            StyleSheet& ref = sheet_;
+            n.on(ev, [&ref, props] (NodeView self) {
+                ref.apply_props(self.as(), *props);
             });
         }
 
-        // 5. Derive inherited props to pass down.
         const InheritedProps child_inh = derive_inherited(n, inherited);
 
-        // 6. Recurse into nested NodeDecls (template children first, then local)
         for (Node* child : effective_props) {
             if (!child || child->kind != NodeKind::NodeDecl) continue;
             build(n, child->as<NodeDecl>(), child_inh, targs);
         }
 
-        // 7. Register named nodes for cross-reference via find().
         if (!decl.id.empty()) {
             std::string node_id = decl.id;
             auto it = targs.find(decl.id);
-            if (it != targs.end()) {
-                // "as val_id" inside a template now resolves to the string value
-                // supplied by the caller for the parameter "val_id".
+            if (it != targs.end())
                 node_id = res_.resolve_str(it->second);
-            }
             sheet_.register_node(node_id, NodeView(n.handle()));
         }
     }
@@ -394,19 +326,18 @@ public:
             const NodeDecl& decl = top->as<NodeDecl>();
 
             if (decl.tag == "root") {
-                // Root-level props go directly onto the pre-existing CORE.root.
                 for (Node* child : decl.props) {
                     if (!child || child->kind != NodeKind::PropDecl) continue;
                     const PropDecl& pd = child->as<PropDecl>();
-                    StyleSheet::dispatch_prop(root, pd.property, node_to_prop(pd.property, pd.value, res_));
+                    sheet_.dispatch_prop(root, pd.property, node_to_prop(pd.property, pd.value, res_));
                 }
                 for (Node* child : decl.props) {
                     if (!child || child->kind != NodeKind::NodeDecl) continue;
-                    build(root, child->as<NodeDecl>(), blank); // default empty targs
+                    build(root, child->as<NodeDecl>(), blank);
                 }
             }
             else {
-                build(root, decl, blank); // default empty targs
+                build(root, decl, blank);
             }
         }
     }
@@ -418,7 +349,7 @@ public:
 
 namespace lintel {
 
-LoadResult load(const char* path) {
+Node load(const char* path, StyleSheet& ss) {
     std::ifstream file(path);
     if (!file)
         throw std::runtime_error(std::string("cannot open file: ") + path);
@@ -426,16 +357,13 @@ LoadResult load(const char* path) {
     std::string source((std::istreambuf_iterator<char>(file)),
                        std::istreambuf_iterator<char>());
 
-    // Pass 1 - lex + parse → AST.
     parser::AST ast;
     parser::parse(source, ast);
 
-    // Pass 2 - collect variables and style declarations.
     parser::StyleResolver resolver(ast);
     traverse(ast, resolver);
 
-    // Pass 2b - resolve AST style nodes into a StyleSheet.
-    StyleSheet sheet = parser::build_stylesheet(ast, resolver);
+    ss = parser::build_stylesheet(ast, resolver);
 
     std::unordered_map<std::string, const parser::Node*> template_map;
     for (const parser::Node* top : ast.nodes) {
@@ -445,12 +373,10 @@ LoadResult load(const char* path) {
         }
     }
 
-    // Pass 3 - build the runtime scene graph.
-    LoadResult result;
-    parser::TreeBuilder(sheet, resolver, template_map).run(result.root, ast);
-    result.sheet = std::move(sheet);
-
-    return result;
+    Node root;
+    parser::TreeBuilder(ss, resolver, template_map).run(root, ast);
+    return root;
 }
 
 } // namespace lintel
+

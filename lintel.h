@@ -568,29 +568,23 @@ public:
     };
 
     // -- Build API ---------------------------------------------------------
-    
-    // Define or replace a named style.
     StyleSheet& define(std::string name, std::vector<Prop> props, std::vector<Handler> handlers = {});
 
-    // Append event handlers to an existing (or new) style.
     StyleSheet& define_handler(const std::string& name, Event event, std::vector<Prop> deltas);
 
     // -- Query -------------------------------------------------------------
-
     bool has_style(std::string_view name) const;
     const Style* find_style(std::string_view name) const;
 
     // -- Application -------------------------------------------------------
+    void apply(Node& n, std::string_view style_name);
 
-    // Apply all props of a named style to n
-    // Wire all of that style's event handlers onto n.
-    // No-op if the style does not exist.
-    void apply(Node& n, std::string_view style_name) const;
+    // Supports simple keys AND dotted cross-node keys (e.g. "main-text.content")
+    static void dispatch_prop(Node& default_target, std::string_view key, const Property& val);
 
-    static void dispatch_prop(Node& n, std::string_view key, const Property& val);
+    void apply_props(Node& default_target, const std::vector<Prop>& props);
 
-    // -- Query -------------------------------------------------------
-
+    // -- Named node registry -----------------------------------------------
     void register_node(const std::string& name, NodeView node);
     NodeView find(const char* name);
     void find(std::initializer_list<std::pair<View<void>&, const char*>>);
@@ -601,15 +595,21 @@ public:
         return View<T>(nullptr);
     }
 
-    // Apply props to n using the given mode.
-    static void apply_props(Node& n, const std::vector<Prop>& props);
 private:
     std::unordered_map<std::string, NodeView> named_;
     std::unordered_map<std::string, Style> styles_;
 
+    // Helper for dotted keys
+    static std::pair<std::string_view, std::string_view> split_dotted_key(std::string_view key) {
+        size_t dot = key.find('.');
+        if (dot == std::string_view::npos)
+            return { key, {} };
+        return { key.substr(0, dot), key.substr(dot + 1) };
+    }
+
     // Register event handlers on n so that each handler fires animate() on
     // its delta list when the event occurs.
-    static void wire_handlers(Node& n, const std::vector<Handler>& handlers);
+    void wire_handlers(Node& n, const std::vector<Handler>& handlers);
 };
 struct LoadResult {
     Node        root;
@@ -624,7 +624,7 @@ struct LoadResult {
 
 // Returns a LoadResult.  The caller owns both the scene sub-tree and the
 // StyleSheet.
-LoadResult load(const char* path_to_file);
+Node load(const char* path_to_file, StyleSheet& ss);
 
 // Convert a wstring to a standard string
 std::string to_string(const std::wstring& w);

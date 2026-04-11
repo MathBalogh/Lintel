@@ -126,12 +126,7 @@ void ICanvasNode::draw(Node& self, Canvas& canvas) {
 
         canvas.push_clip(rect);
         canvas.push_transform(D2D1::Matrix3x2F::Translation(rect.x, rect.y));
-        GPU.d2d_context->DrawImage(
-            (ID2D1Image*) cmd.Get(),
-            D2D1::Point2F(0.0f, 0.0f),
-            D2D1_INTERPOLATION_MODE_LINEAR,
-            D2D1_COMPOSITE_MODE_SOURCE_OVER
-        );
+        GPU.d2d_context->DrawImage(cmd.Get(), D2D1::Point2F(0.0f, 0.0f), D2D1_INTERPOLATION_MODE_LINEAR, D2D1_COMPOSITE_MODE_SOURCE_OVER);
         canvas.pop_transform();
         canvas.pop_clip();
     }

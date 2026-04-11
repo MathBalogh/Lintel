@@ -1,19 +1,31 @@
 
-root:
+root {
 	background-color = #000000
 	
-	text:
+	text as main-text {
 		content = "abc213"
 		height = 100
 		share = 1
 		text-align = left
-	text:
+	}
+	text {
 		content = "abc213"
 		height = 100
 		share = 1
 		text-align = center
-	text:
+
+		on mouse-enter {
+			main-text.content = "on a"
+		}
+	}
+	text {
 		content = "abc213"
 		height = 100
 		share = 1
 		text-align = right
+
+		on mouse-enter {
+			main-text.content = "on b"
+		}
+	}
+}

@@ -90,6 +90,13 @@ static Edges parse_edges(const Property& raw) {
     return Edges(0.f);
 }
 
+static std::pair<std::string_view, std::string_view> split_dotted_key(std::string_view key) {
+    size_t dot = key.find('.');
+    if (dot == std::string_view::npos)
+        return { key, {} };
+    return { key.substr(0, dot), key.substr(dot + 1) };
+}
+
 } // anonymous namespace
 
 // ─── StyleSheet::dispatch_prop ────────────────────────────────────────────────
@@ -206,23 +213,29 @@ void StyleSheet::dispatch_prop(Node& n, std::string_view key, const Property& va
 
 // ─── StyleSheet::apply_props / wire_handlers / animate / apply ────────────────
 
-/*static*/
 void StyleSheet::apply_props(Node& n, const std::vector<Prop>& props) {
-    for (const Prop& p : props)
-        dispatch_prop(n, p.key, p.value);
+    for (const Prop& p : props) {
+        auto [spec, key] = split_dotted_key(p.key);
+        if (spec.empty()) {
+            dispatch_prop(n, key, p.value);
+        }
+        // TODO: constructing string for no good reason
+        else if (auto node = find(std::string(spec).c_str())) {
+            dispatch_prop(node.as(), key, p.value);
+        }
+    }
 }
 
-/*static*/
 void StyleSheet::wire_handlers(Node& n, const std::vector<Handler>& handlers) {
     for (const Handler& h : handlers) {
         auto shared_deltas = std::make_shared<const std::vector<Prop>>(h.deltas);
-        n.on(h.event, [h] (NodeView self) {
-            StyleSheet::apply_props(self.as(), h.deltas);
+        n.on(h.event, [h, this] (NodeView self) {
+            apply_props(self.as(), h.deltas);
         });
     }
 }
 
-void StyleSheet::apply(Node& n, std::string_view style_name) const {
+void StyleSheet::apply(Node& n, std::string_view style_name) {
     auto it = styles_.find(std::string(style_name));
     if (it == styles_.end()) {
         std::cerr << "stylesheet: undefined style '" << style_name << "' - skipped\n";

@@ -31,9 +31,12 @@ const char* to_string(TokenKind kind) {
         "\"",
         ":",
         "=",
-        "<newline>",
-        "<indent>",
-        "<dedent>",
+        "(",
+        ")",
+        ",",
+        "{",
+        "}",
+        ".",
         "<punctuators-end>",
         "<tokens-end>"
     };

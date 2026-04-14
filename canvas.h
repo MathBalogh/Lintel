@@ -29,6 +29,9 @@ public:
     void fill_rect(const Rect& r, Color c, float corner_radius = 0.f);
     void fill_rect(const Rect& r, ID2D1Brush* brush, float corner_radius = 0.f);
 
+    void fill_rect_linear_gradient(const Rect& r, const D2D1_POINT_2F& startPoint, const D2D1_POINT_2F& endPoint, const std::vector<GradientStop>& stops, float corner_radius = 0.f);
+    void fill_rect_radial_gradient(const Rect& r, const D2D1_POINT_2F& center, float radiusX, float radiusY, const std::vector<GradientStop>& stops, const D2D1_POINT_2F& gradientOriginOffset = D2D1::Point2F(0.f, 0.f), float corner_radius = 0.f);
+
     void fill_ellipse(float cx, float cy, float rx, float ry, Color c);
     void fill_ellipse(float cx, float cy, float rx, float ry, ID2D1Brush* brush);
 
@@ -46,17 +49,12 @@ public:
 
     // -- Stroked shapes ------------------------------------------------------
 
-    void stroke_rect(const Rect& r, Color c, float stroke_width,
-                     float corner_radius = 0.f);
-    void stroke_rect(const Rect& r, ID2D1Brush* brush, float stroke_width,
-                     float corner_radius = 0.f);
+    void stroke_rect(const Rect& r, Color c, float stroke_width, float corner_radius = 0.f);
+    void stroke_rect(const Rect& r, ID2D1Brush* brush, float stroke_width, float corner_radius = 0.f);
 
-    void draw_line(float x0, float y0, float x1, float y1,
-                   Color c, float width,
-                   ID2D1StrokeStyle* style = nullptr);
-    void draw_line(float x0, float y0, float x1, float y1,
-                   ID2D1Brush* brush, float width,
-                   ID2D1StrokeStyle* style = nullptr);
+    void draw_line(float x0, float y0, float x1, float y1, Color c, float width, ID2D1StrokeStyle* style = nullptr);
+    void draw_line(float x0, float y0, float x1, float y1, ID2D1Brush* brush, float width, ID2D1StrokeStyle* style = nullptr);
+    void draw_line_dashed(float x0, float y0, float x1, float y1, Color c, float width);
 
     void draw_triangle(float x0, float y0,
                        float x1, float y1,
@@ -121,10 +119,9 @@ public:
 
     // -- General shape utilities ---------------------------------------------
     
-    // -- COM-object factories (unchanged + new gradient support) -------------
     ComPtr<ID2D1SolidColorBrush> make_brush(Color c) const;
-    ComPtr<ID2D1StrokeStyle> make_stroke_style(
-        const D2D1_STROKE_STYLE_PROPERTIES& props) const;
+    ComPtr<ID2D1StrokeStyle> make_stroke_style(const D2D1_STROKE_STYLE_PROPERTIES& props) const;
+    ComPtr<ID2D1StrokeStyle> make_stroke_style(const D2D1_STROKE_STYLE_PROPERTIES& props, const float* dashes, UINT32 dashesCount) const;
 
     ComPtr<IDWriteTextFormat> make_text_format(
         const wchar_t* family,

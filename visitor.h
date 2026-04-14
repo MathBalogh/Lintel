@@ -3,6 +3,7 @@
 #include <functional>
 #include <string>
 #include <unordered_map>
+#include <iostream>
 
 namespace lintel::parser {
 
@@ -115,5 +116,10 @@ private:
     NodeDecl* current_ = nullptr;
     std::vector<Binding> bindings_;
 };
+
+using TemplateArgs = std::unordered_map<std::string, const Node*>;
+std::string resolve_style_name(const Node* node,
+                               const StyleResolver& res,
+                               const TemplateArgs& targs = {});
 
 } // namespace lintel::parser

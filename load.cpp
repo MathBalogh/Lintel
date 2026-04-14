@@ -69,9 +69,6 @@ static lintel::Property try_parse_enum(std::string_view prop_key, const std::str
     return {};
 }
 
-// ─── Template argument bindings ──────────────────────────────────────────────
-using TemplateArgs = std::unordered_map<std::string, const Node*>;
-
 // ─── AST value → PropValue (key-aware) ───────────────────────────────────────
 static lintel::Property node_to_prop(std::string_view key, const Node* node,
                                      const StyleResolver& res,
@@ -195,11 +192,13 @@ static StyleSheet build_stylesheet(const AST& ast, const StyleResolver& res) {
                 props.push_back({ pd.property, node_to_prop(pd.property, pd.value, res) });
             }
             else if (child->kind == NodeKind::ApplyExpr) {
-                const std::string& base = child->as<ApplyExpr>().style;
+                const ApplyExpr& ae = child->as<ApplyExpr>();
+                std::string base = resolve_style_name(ae.style_node, res);
+
                 if (const StyleSheet::Style* s = sheet.find_style(base)) {
                     props.insert(props.begin(), s->props.begin(), s->props.end());
                 }
-                else {
+                else if (!base.empty()) {
                     std::cerr << "load: style '" << sd.name
                         << "' applies undefined base '" << base << "'\n";
                 }
@@ -266,10 +265,18 @@ class TreeBuilder {
         std::vector<Node*> effective_props;
         if (tmpl) effective_props = tmpl->props;
         effective_props.insert(effective_props.end(), decl.props.begin(), decl.props.end());
-
         for (Node* child : effective_props) {
             if (!child || child->kind != NodeKind::ApplyExpr) continue;
-            sheet_.apply(n, child->as<ApplyExpr>().style);
+
+            const ApplyExpr& ae = child->as<ApplyExpr>();
+            std::string style_name = resolve_style_name(ae.style_node, res_, targs);
+
+            if (!style_name.empty()) {
+                sheet_.apply(n, style_name);
+            }
+            else {
+                std::cerr << "load: could not resolve style name in 'apply' (template param?)\n";
+            }
         }
 
         for (Node* child : effective_props) {

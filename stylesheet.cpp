@@ -216,8 +216,8 @@ void StyleSheet::dispatch_prop(Node& n, std::string_view key, const Property& va
 void StyleSheet::apply_props(Node& n, const std::vector<Prop>& props) {
     for (const Prop& p : props) {
         auto [spec, key] = split_dotted_key(p.key);
-        if (spec.empty()) {
-            dispatch_prop(n, key, p.value);
+        if (key.empty()) {
+            dispatch_prop(n, spec, p.value);
         }
         // TODO: constructing string for no good reason
         else if (auto node = find(std::string(spec).c_str())) {

@@ -4,6 +4,37 @@
 
 namespace lintel::parser {
 
+// ─── Node range helpers ───────────────────────────────────────────────────────
+
+void Node::range(const Token& t) {
+    if (t.range.begin < contents.begin) contents.begin = t.range.begin;
+    if (t.range.end > contents.end)   contents.end = t.range.end;
+}
+
+void Node::range(const Node* n) {
+    if (!n) return;
+    if (n->contents.begin < contents.begin) contents.begin = n->contents.begin;
+    if (n->contents.end > contents.end)   contents.end = n->contents.end;
+}
+
+// ─── AST memory management ────────────────────────────────────────────────────
+
+void AST::release() {
+    if (data) {
+        data->release();
+        delete data;
+    }
+    data = nullptr;
+    nodes.clear();
+}
+
+void AST::allocate(size_t reserve) {
+    release();
+    data = new std::pmr::monotonic_buffer_resource(reserve);
+}
+
+// ─── Existing implementations ─────────────────────────────────────────────────
+
 static bool within(TokenKind x, TokenKind low, TokenKind high) {
     return x > low && x < high;
 }

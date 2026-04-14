@@ -36,6 +36,20 @@ void Canvas::fill_rect(const Rect& r, ID2D1Brush* brush, float corner_radius) {
         dc()->FillRectangle(to_d2df(r), brush);
 }
 
+void Canvas::fill_rect_linear_gradient(const Rect& r, const D2D1_POINT_2F& startPoint, const D2D1_POINT_2F& endPoint, const std::vector<GradientStop>& stops, float corner_radius) {
+    auto stop_coll = make_gradient_stops(stops);
+    if (!stop_coll) return;
+    auto brush = make_linear_gradient_brush(startPoint, endPoint, stop_coll.Get());
+    if (brush) fill_rect(r, brush.Get(), corner_radius);
+}
+
+void Canvas::fill_rect_radial_gradient(const Rect& r, const D2D1_POINT_2F& center, float radiusX, float radiusY, const std::vector<GradientStop>& stops, const D2D1_POINT_2F& gradientOriginOffset, float corner_radius) {
+    auto stop_coll = make_gradient_stops(stops);
+    if (!stop_coll) return;
+    auto brush = make_radial_gradient_brush(center, radiusX, radiusY, gradientOriginOffset, stop_coll.Get());
+    if (brush) fill_rect(r, brush.Get(), corner_radius);
+}
+
 void Canvas::fill_ellipse(float cx, float cy, float rx, float ry, Color c) {
     auto brush = make_brush(c);
     if (brush) fill_ellipse(cx, cy, rx, ry, brush.Get());
@@ -100,17 +114,36 @@ void Canvas::stroke_rect(const Rect& r, ID2D1Brush* brush, float stroke_width, f
         dc()->DrawRectangle(to_d2df(r), brush, stroke_width);
 }
 
-void Canvas::draw_line(float x0, float y0, float x1, float y1,
-                       Color c, float width, ID2D1StrokeStyle* style) {
+void Canvas::draw_line(float x0, float y0, float x1, float y1, Color c, float width, ID2D1StrokeStyle* style) {
     auto brush = make_brush(c);
     if (brush) draw_line(x0, y0, x1, y1, brush.Get(), width, style);
 }
 
-void Canvas::draw_line(float x0, float y0, float x1, float y1,
-                       ID2D1Brush* brush, float width, ID2D1StrokeStyle* style) {
+void Canvas::draw_line(float x0, float y0, float x1, float y1, ID2D1Brush* brush, float width, ID2D1StrokeStyle* style) {
     if (!brush || !dc()) return;
     dc()->DrawLine(D2D1::Point2F(x0, y0), D2D1::Point2F(x1, y1),
                    brush, width, style);
+}
+
+void Canvas::draw_line_dashed(float x0, float y0, float x1, float y1, Color c, float width) {
+    if (width <= 0.f) return;
+    auto brush = make_brush(c);
+    if (!brush || !dc()) return;
+
+    const float dashes[] = { 5.0f, 3.0f };
+
+    D2D1_STROKE_STYLE_PROPERTIES props = D2D1::StrokeStyleProperties(
+        D2D1_CAP_STYLE_FLAT,      // start cap
+        D2D1_CAP_STYLE_FLAT,      // end cap
+        D2D1_CAP_STYLE_ROUND,     // dash caps (rounded for polished look)
+        D2D1_LINE_JOIN_MITER,
+        10.0f,                    // miter limit
+        D2D1_DASH_STYLE_CUSTOM,
+        0.0f                      // dash offset
+    );
+
+    auto style = make_stroke_style(props, dashes, 2);
+    draw_line(x0, y0, x1, y1, brush.Get(), width, style.Get());
 }
 
 void Canvas::draw_triangle(float x0, float y0, float x1, float y1,
@@ -330,10 +363,15 @@ ComPtr<ID2D1SolidColorBrush> Canvas::make_brush(Color c) const { /* unchanged */
 }
 
 ComPtr<ID2D1StrokeStyle> Canvas::make_stroke_style(
-    const D2D1_STROKE_STYLE_PROPERTIES& props) const { /* unchanged */
+    const D2D1_STROKE_STYLE_PROPERTIES& props) const {
+    return make_stroke_style(props, nullptr, 0);
+}
+ComPtr<ID2D1StrokeStyle> Canvas::make_stroke_style(
+    const D2D1_STROKE_STYLE_PROPERTIES& props,
+    const float* dashes,
+    UINT32 dashesCount) const {
     ComPtr<ID2D1StrokeStyle> style;
-    if (GPU.d2d_factory)
-        GPU.d2d_factory->CreateStrokeStyle(props, nullptr, 0, &style);
+    if (GPU.d2d_factory) GPU.d2d_factory->CreateStrokeStyle(props, dashes, dashesCount, &style);
     return style;
 }
 

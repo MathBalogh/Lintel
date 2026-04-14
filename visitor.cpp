@@ -1,10 +1,10 @@
 #include "visitor.h"
 #include <sstream>
+#include <iostream>
 
 namespace lintel::parser {
 
 // ─── dispatch ─────────────────────────────────────────────────────────────────
-
 void dispatch(Node& node, NodeVisitor& v) {
     switch (node.kind) {
         case NodeKind::IdentExpr: v.visit(node.as<IdentExpr>()); break;
@@ -23,14 +23,12 @@ void dispatch(Node& node, NodeVisitor& v) {
 }
 
 // ─── traverse ─────────────────────────────────────────────────────────────────
-
 void traverse(AST& ast, NodeVisitor& v) {
     for (Node* n : ast.nodes)
         if (n) dispatch(*n, v);
 }
 
 // ─── NodeVisitor default container implementations ────────────────────────────
-
 void NodeVisitor::visit(StyleDecl& s) {
     for (Node* p : s.props) if (p) dispatch(*p, *this);
 }
@@ -40,41 +38,74 @@ void NodeVisitor::visit(NodeDecl& n) {
 }
 
 // ─── StyleResolver ────────────────────────────────────────────────────────────
-
 void StyleResolver::visit(VarDecl& d) {
     vars_[d.name] = d.value;
 }
 
 void StyleResolver::visit(StyleDecl& d) {
     PropertyMap& pm = styles_[d.name];
-    // Collect explicit props, then let "apply" inside a style merge another.
+
     for (Node* child : d.props) {
         if (!child) continue;
+
         if (child->kind == NodeKind::PropDecl) {
             auto& pd = child->as<PropDecl>();
             pm[pd.property] = pd.value;
         }
         else if (child->kind == NodeKind::ApplyExpr) {
-            // Style inheritance: merge the referenced style's properties.
-            const auto& ref = child->as<ApplyExpr>().style;
-            if (const PropertyMap* base = style(ref))
+            const ApplyExpr& ae = child->as<ApplyExpr>();
+            std::string base_name = resolve_style_name(ae.style_node, *this);
+
+            if (const PropertyMap* base = style(base_name)) {
                 for (const auto& [k, v] : *base)
-                    pm.emplace(k, v); // don't overwrite - child wins
+                    pm.emplace(k, v); // child wins on conflict
+            }
+            else if (!base_name.empty()) {
+                std::cerr << "load: style '" << d.name
+                    << "' applies undefined base '" << base_name << "'\n";
+            }
         }
-        // OnDecl inside a style is left for EventBinder / TreeBuilder.
     }
 }
 
 void StyleResolver::visit(NodeDecl& d) {
-    // Recurse so nested NodeDecls and their VarDecls are also visited.
     for (Node* child : d.props)
         if (child) dispatch(*child, *this);
 }
 
 void StyleResolver::visit(ApplyExpr& a) {
     if (!on_apply_) return;
-    if (const PropertyMap* pm = style(a.style))
-        on_apply_(a.style, *pm);
+
+    std::string style_name = resolve_style_name(a.style_node, *this);
+    if (const PropertyMap* pm = style(style_name))
+        on_apply_(style_name, *pm);
+}
+
+// ─── resolve_style_name implementation ───────────────────────────────────────
+
+std::string resolve_style_name(const Node* node, const StyleResolver& res, const TemplateArgs& targs) {
+    if (!node) return {};
+
+    if (node->kind == NodeKind::IdentExpr) {
+        const std::string& name = node->as<IdentExpr>().name;
+
+        // 1. Template argument substitution (highest priority)
+        auto it = targs.find(name);
+        if (it != targs.end())
+            return resolve_style_name(it->second, res, targs);
+
+        // 2. Top-level variable lookup
+        if (const Node* target = res.var(name))
+            return resolve_style_name(target, res, targs);
+    }
+
+    // 3. Final resolved identifier
+    if (node->kind == NodeKind::IdentExpr) {
+        return node->as<IdentExpr>().name;
+    }
+
+    // Fallback for other expression types (rare for style names)
+    return res.resolve_str(node);
 }
 
 std::string StyleResolver::resolve_str(const Node* node) const {
@@ -84,8 +115,7 @@ std::string StyleResolver::resolve_str(const Node* node) const {
         case NodeKind::IdentExpr:
         {
             const std::string& name = node->as<IdentExpr>().name;
-            // Follow one level of variable indirection.
-            if (Node* target = var(name))
+            if (Node* target = const_cast<StyleResolver*>(this)->var(name)) // safe const cast for lookup
                 return resolve_str(target);
             return name;
         }
@@ -112,7 +142,6 @@ std::string StyleResolver::resolve_str(const Node* node) const {
 }
 
 // ─── EventBinder ──────────────────────────────────────────────────────────────
-
 void EventBinder::visit(NodeDecl& d) {
     NodeDecl* prev = current_;
     current_ = &d;
@@ -122,7 +151,7 @@ void EventBinder::visit(NodeDecl& d) {
         if (child->kind == NodeKind::OnDecl)
             bindings_.push_back({ current_, &child->as<OnDecl>() });
         else if (child->kind == NodeKind::NodeDecl)
-            visit(child->as<NodeDecl>());  // recurse into nested nodes
+            visit(child->as<NodeDecl>());  // recurse
     }
 
     current_ = prev;

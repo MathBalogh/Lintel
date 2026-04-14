@@ -3,7 +3,7 @@
 #include "plot_common.h"   // unified plot helpers
 
 #include <vector>
-#include <map>
+#include <unordered_map>
 
 namespace lintel {
 
@@ -13,7 +13,7 @@ namespace lintel {
 
 class IHistogramNode : public INode {
 public:
-    std::map<std::string, DataSeries> series;
+    std::unordered_map<std::string, DataSeries> series;
 
     // Manual axis ranges
     UIValue range_x_min;

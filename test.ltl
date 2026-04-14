@@ -1,31 +1,17 @@
 
+style red {
+	background-color = #FF0000
+}
+
+template name node(bg, bd, st) {
+	apply st
+	border-color = bd
+	border-weight = 1
+	width = 50
+	height = 50
+}
+
 root {
 	background-color = #000000
-	
-	text as main-text {
-		content = "abc213"
-		height = 100
-		share = 1
-		text-align = left
-	}
-	text {
-		content = "abc213"
-		height = 100
-		share = 1
-		text-align = center
-
-		on mouse-enter {
-			main-text.content = "on a"
-		}
-	}
-	text {
-		content = "abc213"
-		height = 100
-		share = 1
-		text-align = right
-
-		on mouse-enter {
-			main-text.content = "on b"
-		}
-	}
+	name(#FF0000, #00FF00, red) {}
 }

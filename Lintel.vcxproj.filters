@@ -19,15 +19,6 @@
     <Filter Include="lib\document">
       <UniqueIdentifier>{205663ca-ee15-4bd4-a2f3-5ac4334d422f}</UniqueIdentifier>
     </Filter>
-    <Filter Include="lib\primatives">
-      <UniqueIdentifier>{e4e43b06-b9f2-424a-b444-aa4c4d55c3ff}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="lib\primatives\gpu">
-      <UniqueIdentifier>{b1ba17ee-f9da-400b-bc07-7cf23fbb52b4}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="lib\primatives\window">
-      <UniqueIdentifier>{ba48dd07-da70-4fce-83f4-299fd1a6cc62}</UniqueIdentifier>
-    </Filter>
     <Filter Include="lib\nodes\text">
       <UniqueIdentifier>{042f426d-8751-4da4-9b8e-1911dd0bfd18}</UniqueIdentifier>
     </Filter>
@@ -55,13 +46,19 @@
     <Filter Include="lib\ltl\ast">
       <UniqueIdentifier>{61b835ba-811c-4372-9823-3de2dbecd34f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="lib\window">
+      <UniqueIdentifier>{ba48dd07-da70-4fce-83f4-299fd1a6cc62}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lib\gpu">
+      <UniqueIdentifier>{b1ba17ee-f9da-400b-bc07-7cf23fbb52b4}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="gpu.cpp">
-      <Filter>lib\primatives\gpu</Filter>
+      <Filter>lib\gpu</Filter>
     </ClCompile>
     <ClCompile Include="iwindow.cpp">
-      <Filter>lib\primatives\window</Filter>
+      <Filter>lib\window</Filter>
     </ClCompile>
     <ClCompile Include="itextnode.cpp">
       <Filter>lib\nodes\text</Filter>
@@ -94,7 +91,7 @@
       <Filter>lib\api</Filter>
     </ClCompile>
     <ClCompile Include="canvas.cpp">
-      <Filter>lib\primatives\gpu</Filter>
+      <Filter>lib\gpu</Filter>
     </ClCompile>
     <ClCompile Include="document.cpp">
       <Filter>lib\document</Filter>
@@ -123,10 +120,10 @@
       <Filter>lib\api</Filter>
     </ClInclude>
     <ClInclude Include="gpu.h">
-      <Filter>lib\primatives\gpu</Filter>
+      <Filter>lib\gpu</Filter>
     </ClInclude>
     <ClInclude Include="iwindow.h">
-      <Filter>lib\primatives\window</Filter>
+      <Filter>lib\window</Filter>
     </ClInclude>
     <ClInclude Include="itextnode.h">
       <Filter>lib\nodes\text</Filter>
@@ -150,7 +147,7 @@
       <Filter>lib</Filter>
     </ClInclude>
     <ClInclude Include="canvas.h">
-      <Filter>lib\primatives\gpu</Filter>
+      <Filter>lib\gpu</Filter>
     </ClInclude>
     <ClInclude Include="document.h">
       <Filter>lib\document</Filter>

@@ -2,6 +2,7 @@
 
 #include "inode.h"   // Canvas, Rect, etc.
 
+#include <unordered_map>
 #include <vector>
 #include <map>
 #include <cmath>
@@ -25,7 +26,7 @@ struct PlotBounds {
 // If a range is Auto it is computed from the visible series; otherwise the
 // supplied .value is used (the UIUnit is ignored — the value is a data coordinate).
 inline PlotBounds compute_plot_bounds(
-    const std::map<std::string, DataSeries>& series,
+    const std::unordered_map<std::string, DataSeries>& series,
     const UIValue& range_x_min,
     const UIValue& range_x_max,
     const UIValue& range_y_min,

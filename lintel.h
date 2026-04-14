@@ -472,35 +472,81 @@ public:
     TextNode& on_char(std::function<bool(wchar_t ch)> callback);
 };
 
+
+enum class SeriesKind {
+    Line,       // connected line segments
+    Scatter,    // individual points / circles
+};
+
+// ---------------------------------------------------------------------------
+// Marker — a single axis-aligned annotation line
+// ---------------------------------------------------------------------------
+
+enum class MarkerAxis { X, Y };
+
+struct Marker {
+    MarkerAxis  axis;
+    float       value;          // data-space coordinate
+    Color       color = Color(1.f, 1.f, 0.f, 0.55f);
+    float       weight = 1.f;
+    bool        dashed = true;
+    std::wstring label;         // optional, drawn beside the line
+};
+
+// ---------------------------------------------------------------------------
+// DataSeries
+// ---------------------------------------------------------------------------
+
 struct DataSeries {
-    bool display = true;
+    bool        display = true;
+    SeriesKind  kind = SeriesKind::Line;
     std::wstring name;
     std::vector<float> xs;
     std::vector<float> ys;
-    Color color = Color(1.0f, 0.8f, 0.2f);
-    float weight = 1.0f;
+    Color       color = Color(1.f, 0.8f, 0.2f);
+    float       weight = 1.5f;     // line width  OR  point radius
+    bool        sorted = false;    // set true when xs are known-sorted
 
     void push(float x, float y) {
         xs.push_back(x);
         ys.push_back(y);
+        sorted = false;             // caller must re-sort if needed
     }
 
-    void clear() {
-        xs.clear();
-        ys.clear();
+    void push_sorted(float x, float y) {
+        xs.push_back(x);
+        ys.push_back(y);
+        // caller guarantees monotone-increasing x
+        sorted = true;
     }
+
+    void clear() { xs.clear(); ys.clear(); }
+
+    // Pre-sort xs (and reorder ys to match) for binary-search hit-testing.
+    void sort_by_x();
 };
+
 class GraphNode : public Node {
 public:
     GraphNode();
 
     void remove_series(const std::string& name);
-    // Create or find
+
+    // Create or find a named series.
     DataSeries& series(const std::string& name);
+
+    // Convenience: set the kind on an existing-or-new series.
+    DataSeries& line_series(const std::string& name);
+    DataSeries& scatter_series(const std::string& name);
+
+    // Axis markers
+    GraphNode& add_marker(Marker m);
+    GraphNode& remove_markers();          // clears all markers
 
     GraphNode& x_range(float lo, float hi);
     GraphNode& y_range(float lo, float hi);
 };
+
 class HistogramNode : public Node {
 public:
     HistogramNode();

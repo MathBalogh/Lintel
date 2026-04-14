@@ -188,15 +188,18 @@ class Parser {
     }
 
     Node* parse_apply() {
-        Token app = lexer_.pop();
-        Token style_t = lexer_.pop();
+        Token app = lexer_.pop(); // 'apply'
+        Node* style_expr = parse_expr();
 
-        if (style_t.kind != TokenKind::Identifier)
-            unexpected(style_t, "style name after 'apply'");
+        if (!style_expr) {
+            unexpected(lexer_.peek(), "style name or template parameter after 'apply'");
+            return nullptr;
+        }
 
-        auto* a = ast_.make<ApplyExpr>(std::string(lexer_.slice(style_t)));
+        auto* a = ast_.make<ApplyExpr>();
+        a->style_node = style_expr;
         a->range(app);
-        a->range(style_t);
+        a->range(style_expr);
         return a;
     }
 

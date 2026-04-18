@@ -325,8 +325,9 @@ public:
     void make_dirty();
     void make_clean();
 
-    Properties& set(Key key, Property value);
-    Properties& clear(Key key);
+    // Returns boolean indicating if dirty should be propagated
+    bool set(Key key, Property value);
+    bool clear(Key key);
     bool has(Key key) const noexcept;
 
     bool*         get_bool(Key key);
@@ -472,18 +473,15 @@ public:
     TextNode& on_char(std::function<bool(wchar_t ch)> callback);
 };
 
+// ---------------------------------------------------------------------------
+// DataSeries
+// ---------------------------------------------------------------------------
 
 enum class SeriesKind {
     Line,       // connected line segments
     Scatter,    // individual points / circles
 };
-
-// ---------------------------------------------------------------------------
-// Marker — a single axis-aligned annotation line
-// ---------------------------------------------------------------------------
-
 enum class MarkerAxis { X, Y };
-
 struct Marker {
     MarkerAxis  axis;
     float       value;          // data-space coordinate
@@ -492,11 +490,6 @@ struct Marker {
     bool        dashed = true;
     std::wstring label;         // optional, drawn beside the line
 };
-
-// ---------------------------------------------------------------------------
-// DataSeries
-// ---------------------------------------------------------------------------
-
 struct DataSeries {
     bool        display = true;
     SeriesKind  kind = SeriesKind::Line;

@@ -50,26 +50,15 @@ struct IGraphNode : public INode {
     // --- drawing helpers ---
     PlotBounds compute_bounds() const;
 
-    void rebuild_cache(const PlotBounds& b,
-                       float px, float py, float pw, float ph);
+    void rebuild_cache(const PlotBounds& b, float px, float py, float pw, float ph);
 
-    void draw_toggle_pills(float cx, float cy, float cw,
-                           Canvas& canvas) const;
+    void draw_toggle_pills(float cx, float cy, float cw, Canvas& canvas) const;
 
-    void draw_plot_grid(const PlotBounds& b,
-                        float px, float py, float pw, float ph,
-                        Canvas& canvas) const;
-
-    void draw_series_cached(float px, float py, float pw, float ph,
-                            Canvas& canvas) const;
+    void draw_series_cached(float px, float py, float pw, float ph, Canvas& canvas) const;
 
     void draw_markers(const PlotBounds& b,
                       float px, float py, float pw, float ph,
                       Canvas& canvas) const;
-
-    void draw_plot_labels(const PlotBounds& b,
-                          float px, float py, float pw, float ph,
-                          Canvas& canvas) const;
 
     void draw_hover_label(const PlotBounds& b,
                           float px, float py, float pw, float ph,

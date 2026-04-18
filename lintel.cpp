@@ -127,7 +127,7 @@ bool Properties::is_clean() const { return !layout_dirty_; }
 void Properties::make_dirty() { layout_dirty_ = true; }
 void Properties::make_clean() { layout_dirty_ = false; }
 
-Properties& Properties::set(Key key, Property value) {
+bool Properties::set(Key key, Property value) {
     if (key.is_hot_float() && value.is_float()) {
         unsigned int rel = key.hot_float_index();
         hot_floats_[rel] = value.get_float();
@@ -142,11 +142,9 @@ Properties& Properties::set(Key key, Property value) {
         cold_[key] = value;
     }
 
-    if (key.affects_layout()) make_dirty();
-
-    return *this;
+    return key.affects_layout();
 }
-Properties& Properties::clear(Key key) {
+bool Properties::clear(Key key) {
     if (key.is_hot_float()) {
         unsigned int rel = key.hot_float_index();
         hot_floats_mask_ &= ~(1u << rel);
@@ -159,7 +157,7 @@ Properties& Properties::clear(Key key) {
         cold_.erase(key);
     }
 
-    return *this;
+    return key.affects_layout();
 }
 
 bool Properties::has(Key key) const noexcept {

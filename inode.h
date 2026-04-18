@@ -60,7 +60,7 @@ public:
 
     virtual void apply_callback(Key key) {}
     void apply(Key key, Property val) {
-        props.set(key, val);
+        if (props.set(key, val)) propagate_dirty();
         apply_callback(key);
     }
 

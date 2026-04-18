@@ -137,8 +137,6 @@ PlotBounds IGraphNode::compute_bounds() const {
 void IGraphNode::rebuild_cache(const PlotBounds& b, float px, float py, float pw, float ph) {
     for (const auto& [name, s] : series) {
         SeriesCache& c = cache[name];
-        if (!c.dirty) continue;
-
         const size_t n = s.xs.size();
         c.screen_xs.resize(n);
         c.screen_ys.resize(n);
@@ -147,7 +145,6 @@ void IGraphNode::rebuild_cache(const PlotBounds& b, float px, float py, float pw
             c.screen_xs[i] = map_to_px(s.xs[i], b.xl, b.xh, px, px + pw);
             c.screen_ys[i] = map_to_px(s.ys[i], b.yl, b.yh, py + ph, py);
         }
-        c.dirty = false;
     }
 }
 

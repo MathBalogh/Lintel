@@ -1,17 +1,20 @@
 
-style red {
-	background-color = #FF0000
-}
-
-template name node(bg, bd, st) {
-	apply st
-	border-color = bd
-	border-weight = 1
-	width = 50
-	height = 50
-}
-
 root {
 	background-color = #000000
-	name(#FF0000, #00FF00, red) {}
+
+	node {
+		width = 50
+		height = 50
+		background-color = #FF0000
+		on mouse-down {
+			background-color = #00FF00
+			c.display = true
+		}
+	}
+
+	text as c {
+		display = false
+		content = "Hello, World!"
+		text-color = #FFFFFF
+	}
 }
